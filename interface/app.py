@@ -17,59 +17,12 @@ from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
 
 # Load the OPENAI_API_KEY from your environment variables
-api_key = os.getenv("OPENAI_API_KEY")
+api_key = "OPENAI_API_KEY"
 
 # Instantiate the OpenAI client with your API key
 client = OpenAI(api_key=api_key)
 
 dotenv.load_dotenv()
-
-
-
-def main_page():
-    # ---- MAINPAGE ----
-
-    col1, col2 = st.columns([10, 4])
-    with col2:
-        st.markdown("# Document Intelligence")
-        st.subheader('...')
-        ...
-    with col1:
-        st.markdown("# AI Vision 👁️")
-        # st.subheader('URL Manager ')
-        st.write("Follow the next steps extract data from the documents:")
-
-
-    st.warning(
-        """ \n Insert the URL \n
-                Click add url \n
-            Select the URL in Checkbox \n
-            Click Run Selected ( 1 per time ) \n
-            Expand the Dataframe to see""",
-        icon="⚠️",
-    )
-
-
-    st.markdown("""---""")
-
-
-
-    st.markdown("""---""")
-
-
-
-
-    st.markdown("""Footer""")
-
-    # ---- HIDE STREAMLIT STYLE ----
-    hide_st_style = """
-                    <style>
-                    #MainMenu {visibility: hidden;}
-                    footer {visibility: hidden;}
-                    header {visibility: hidden;}
-                    </style>
-                    """
-    st.markdown(hide_st_style, unsafe_allow_html=True)
 
 
 def analyze_uploaded_document(uploaded_file):
@@ -100,6 +53,38 @@ class Main:
 
 
     def main(self):
+        # ---- MAINPAGE ----
+
+        col1, col2 = st.columns([10, 4])
+        with col2:
+            st.markdown("# Document Intelligence")
+            # st.subheader('...')
+
+        with col1:
+            st.markdown("# AI Vision 👁️")
+            # st.subheader('URL Manager ')
+            st.write("Follow the next steps extract data from the documents:")
+
+        st.warning(
+            """ \n Insert the URL \n
+                    Click add url \n
+                Select the URL in Checkbox \n
+                Click Run Selected ( 1 per time ) \n
+                Expand the Dataframe to see""",
+            icon="⚠️",
+        )
+
+        st.markdown("""Footer""")
+
+        # ---- HIDE STREAMLIT STYLE ----
+        hide_st_style = """
+                            <style>
+                            #MainMenu {visibility: hidden;}
+                            footer {visibility: hidden;}
+                            header {visibility: hidden;}
+                            </style>
+                            """
+        st.markdown(hide_st_style, unsafe_allow_html=True)
 
         # ---- SIDEBAR ----
 
@@ -133,7 +118,8 @@ class Main:
             if folder_path:
                 st.write("Analyzing documents in folder...")
                 analyze_folder(folder_path)
-            main_page()
+
+
             # pass
 
         st.sidebar.markdown("# AI Document Parser")
