@@ -12,9 +12,6 @@ COPY . /code
 
 RUN pip install -r requirements.txt
 
-RUN playwright install
-
-RUN playwright install-deps
 
 EXPOSE 8080
 
