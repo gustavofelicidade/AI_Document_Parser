@@ -12,7 +12,7 @@ import yaml
 from openai import OpenAI
 from yaml.loader import SafeLoader
 
-from identity_document import analyze_document, main as analyze_folder
+from identity_document import analyze_document, main as analyze_folder, ENDPOINT, API_KEY
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
 
