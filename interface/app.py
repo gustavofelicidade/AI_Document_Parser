@@ -12,6 +12,10 @@ import yaml
 from openai import OpenAI
 from yaml.loader import SafeLoader
 
+from identity_document import analyze_document, main as analyze_folder
+from azure.core.credentials import AzureKeyCredential
+from azure.ai.formrecognizer import DocumentAnalysisClient
+
 # Load the OPENAI_API_KEY from your environment variables
 api_key = os.getenv("OPENAI_API_KEY")
 
@@ -68,6 +72,22 @@ def main_page():
     st.markdown(hide_st_style, unsafe_allow_html=True)
 
 
+def analyze_uploaded_document(uploaded_file):
+    client = DocumentAnalysisClient(endpoint=ENDPOINT, credential=AzureKeyCredential(API_KEY))
+    document = uploaded_file.read()
+    poller = client.begin_analyze_document("prebuilt-idDocument", document)
+    result = poller.result()
+
+    data = []
+    for doc in result.documents:
+        for field in doc.fields.values():
+            data.append({
+                "Field": field.name,
+                "Value": field.value,
+                "Confidence": field.confidence
+            })
+    return pd.DataFrame(data)
+
 class Main:
 
     def __init__(self):
@@ -101,6 +121,18 @@ class Main:
         )
 
         if option == 'Home':
+            st.title("Document Analysis with Azure")
+            uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png", "pdf"])
+            folder_path = st.text_input("Or enter a folder path to analyze all documents in it:")
+
+            if uploaded_file is not None:
+                st.write("Analyzing uploaded document...")
+                df = analyze_uploaded_document(uploaded_file)
+                st.write(df)
+
+            if folder_path:
+                st.write("Analyzing documents in folder...")
+                analyze_folder(folder_path)
             main_page()
             # pass
 
