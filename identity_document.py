@@ -17,7 +17,8 @@ def analyze_document(client, document_path):
     for doc in result.documents:
         print("Document detected:")
         for field in doc.fields.values():
-            print(f"{field.name}: {field.value} (confidence: {field.confidence})")
+            print(field)
+            # print(f"{field.name}: {field.value} (confidence: {field.confidence})")
 
 
 def main(dataset_path):

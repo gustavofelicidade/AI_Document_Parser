@@ -1,0 +1,17 @@
+credentials:
+  usernames:
+    gustavo:
+      email: gustavofelicidadeda@gmail.com
+      name: Gustavo Felicidade
+      password: abc # To be replaced with hashed password
+    rbriggs:
+      email: rbriggs@gmail.com
+      name: Rebecca Briggs
+      password: def # To be replaced with hashed password
+cookie:
+  expiry_days: 30
+  key: random_signature_key # Must be string
+  name: random_cookie_name
+preauthorized:
+  emails:
+  - melsby@gmail.com
