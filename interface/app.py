@@ -2,12 +2,7 @@ import os
 import time
 import dotenv
 import streamlit as st
-import streamlit_authenticator as stauth
-
-from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
-import json
-from collections import defaultdict
 import yaml
 from openai import OpenAI
 from yaml.loader import SafeLoader
