@@ -26,14 +26,13 @@ def analyze_uploaded_document(uploaded_file, document_type):
     poller = client.begin_analyze_document("prebuilt-idDocument", document)
     result = poller.result()
     print(f"result: {result}")
+
     if document_type == "CNH_Verso":
         data = []
-        for doc in result.documents:
-            for field in doc.fields.values():
+        for page in result.pages:
+            for line in page.lines:
                 data.append({
-                    "Field": field.name,
-                    "Value": field.value,
-                    "Confidence": field.confidence
+                    "Content": line.content
                 })
         return pd.DataFrame(data)
     else:

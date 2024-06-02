@@ -7,10 +7,10 @@ st.set_page_config(layout="wide",
                    page_icon="👁️"
                    )
 
-import subprocess
+
 
 # ================================
-# START THE DASHBOARD APPLICATION
+# START THE AI VISION APPLICATION
 # ================================
 
 # ok
