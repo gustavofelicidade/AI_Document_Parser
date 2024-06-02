@@ -20,21 +20,24 @@ client = OpenAI(api_key=api_key)
 dotenv.load_dotenv()
 
 
-def analyze_uploaded_document(uploaded_file):
+def analyze_uploaded_document(uploaded_file, document_type):
     client = DocumentAnalysisClient(endpoint=ENDPOINT, credential=AzureKeyCredential(API_KEY))
     document = uploaded_file.read()
     poller = client.begin_analyze_document("prebuilt-idDocument", document)
     result = poller.result()
     print(f"result: {result}")
-    data = []
-    for doc in result.documents:
-        for field in doc.fields.values():
-            data.append({
-                "Field": field,
-
-            })
-    print(pd.DataFrame(data))
-    return pd.DataFrame(data)
+    if document_type == "CNH_Verso":
+        data = []
+        for doc in result.documents:
+            for field in doc.fields.values():
+                data.append({
+                    "Field": field.name,
+                    "Value": field.value,
+                    "Confidence": field.confidence
+                })
+        return pd.DataFrame(data)
+    else:
+        return pd.DataFrame()
 
 class Main:
 
@@ -87,12 +90,13 @@ class Main:
 
         if option == 'Home':
             st.title("Document Analysis with Azure")
+            document_type = st.selectbox("Select document type", ["CNH_Verso", "CNH_Aberta", "CNH_Frente", "CNH_Verso", "CPF_Frente", "CPF_Verso", "RG_Aberto", "RG_Frente", "RG_Verso"])
             uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png", "pdf"])
             folder_path = st.text_input("Or enter a folder path to analyze all documents in it:")
 
             if uploaded_file is not None:
                 st.write("Analyzing uploaded document...")
-                df = analyze_uploaded_document(uploaded_file)
+                df = analyze_uploaded_document(uploaded_file, document_type)
                 st.write(df)
 
             if folder_path:
