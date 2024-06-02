@@ -25,15 +25,15 @@ def analyze_uploaded_document(uploaded_file):
     document = uploaded_file.read()
     poller = client.begin_analyze_document("prebuilt-idDocument", document)
     result = poller.result()
-
+    print(f"result: {result}")
     data = []
     for doc in result.documents:
         for field in doc.fields.values():
             data.append({
-                "Field": field.name,
-                "Value": field.value,
-                "Confidence": field.confidence
+                "Field": field,
+
             })
+    print(pd.DataFrame(data))
     return pd.DataFrame(data)
 
 class Main:
@@ -42,8 +42,6 @@ class Main:
 
         with open('config.yaml') as file:
             self.config = yaml.load(file, Loader=SafeLoader)
-
-        ...
 
 
 
@@ -61,25 +59,12 @@ class Main:
             st.write("Follow the next steps extract data from the documents:")
 
         st.warning(
-            """ \n Insert the URL \n
-                    Click add url \n
-                Select the URL in Checkbox \n
-                Click Run Selected ( 1 per time ) \n
-                Expand the Dataframe to see""",
+            """ \n Insert Image to process \n
+                    """,
             icon="⚠️",
         )
 
-        st.markdown("""Footer""")
 
-        # ---- HIDE STREAMLIT STYLE ----
-        hide_st_style = """
-                            <style>
-                            #MainMenu {visibility: hidden;}
-                            footer {visibility: hidden;}
-                            header {visibility: hidden;}
-                            </style>
-                            """
-        st.markdown(hide_st_style, unsafe_allow_html=True)
 
         # ---- SIDEBAR ----
 
@@ -116,5 +101,16 @@ class Main:
 
 
             # pass
+            st.markdown("""Footer""")
+
+            # ---- HIDE STREAMLIT STYLE ----
+            hide_st_style = """
+                                       <style>
+                                       #MainMenu {visibility: hidden;}
+                                       footer {visibility: hidden;}
+                                       header {visibility: hidden;}
+                                       </style>
+                                       """
+            st.markdown(hide_st_style, unsafe_allow_html=True)
 
         st.sidebar.markdown("# AI Document Parser")
