@@ -69,31 +69,33 @@ def cnh_process(result):
 
 
 def rg_process(result):
-    rg_header = [
-
-        "Registro Geral",
+    cnh_header = [
         "Nome",
-        "Filiação",
-        "Naturalidade",
+        "Doc. Identidade / Órg. Emissor / UF",
         "CPF",
-        "Doc. Origem",
         "Data de Nascimento",
-        "Data de Expedição"
-
+        "Filiação",
+        "Cat. Hab.",
+        "N° de Registro",
+        "Validade",
+        "1° Habilitação"
     ]
 
-    rg_dict_patterns = {
-        "Registro Geral": r"REGISTRO GERAL ([0-9\.]+)",
-        "Nome": r"NOME ([A-Z ]+)",
-        "Filiação": r"FILIAÇÃO ([A-Z ]+ [A-Z ]+)",
-        "Naturalidade": r"NATURALIDADE DATA DE NASCIMENTO VALID ([A-Z/ ]+)",
-        "CPF": r"CPF ([0-9\.\-]+)",
-        "Doc. Origem": r"DOC\. ORIGEM ([A-Z0-9\. ]+)",
-        "Data de Nascimento": r"DATA DE NASCIMENTO VALID [A-Z/ ]+ ([0-9/]+)",
-        "Data de Expedição": r"DATA DE EXPEDIÇÃO ([0-9/]+)"
+
+    cnh_dict_patterns = {
+        "Nome": r"VALIS ([A-Z ]+)",
+        "Doc. Identidade / Órg. Emissor / UF": r"IDENTIDADE / ÓRG\. EMISSOR / UF ([0-9A-Z]+)",
+        "CPF": r"CPF[ -·]DATA NASCIMENTO ([0-9\.\-]+)",
+        "Data de Nascimento": r"DATA NASCIMENTO [0-9\.\-]+ ([0-9/]+)",
+        "Filiação": r"FILIAÇÃO[ -]+([A-Z ]+ [A-Z ]+)",
+        "Cat. Hab.": r"CAT\.? HAB\.? ([A-Z]+)",
+        "N° de Registro": r"Nº REGISTRO --- - ([0-9]+)",
+        "Validade": r"VALIDADE ([0-9/]+)",
+        "1° Habilitação": r"1[ª°] HABILITAÇÃO ([0-9/]+)",
+        "Data Emissão": r"DATA EMISSÃO ([0-9/]+)"
     }
 
-    data = {key: "" for key in rg_header}
+    data = {key: "" for key in cnh_header}
 
     for page in result.pages:
         page_content = " ".join([line.content for line in page.lines])
@@ -101,7 +103,7 @@ def rg_process(result):
         print("page_content: \n", page_content)
         print("type: \n", type(page_content))
         print("========================================================================================")
-        for key, pattern in rg_dict_patterns.items():
+        for key, pattern in cnh_dict_patterns.items():
             match = re.search(pattern, page_content)
             if match:
                 data[key] = match.group(1).strip()
@@ -111,20 +113,60 @@ def rg_process(result):
     return pd.DataFrame([data])
 
 
+def passaporte_process(result):
+    cnh_header = [
+        "Nome",
+        "Doc. Identidade / Órg. Emissor / UF",
+        "CPF",
+        "Data de Nascimento",
+        "Filiação",
+        "Cat. Hab.",
+        "N° de Registro",
+        "Validade",
+        "1° Habilitação"
+    ]
+
+
+    cnh_dict_patterns = {
+        "Nome": r"VALIS ([A-Z ]+)",
+        "Doc. Identidade / Órg. Emissor / UF": r"IDENTIDADE / ÓRG\. EMISSOR / UF ([0-9A-Z]+)",
+        "CPF": r"CPF[ -·]DATA NASCIMENTO ([0-9\.\-]+)",
+        "Data de Nascimento": r"DATA NASCIMENTO [0-9\.\-]+ ([0-9/]+)",
+        "Filiação": r"FILIAÇÃO[ -]+([A-Z ]+ [A-Z ]+)",
+        "Cat. Hab.": r"CAT\.? HAB\.? ([A-Z]+)",
+        "N° de Registro": r"Nº REGISTRO --- - ([0-9]+)",
+        "Validade": r"VALIDADE ([0-9/]+)",
+        "1° Habilitação": r"1[ª°] HABILITAÇÃO ([0-9/]+)",
+        "Data Emissão": r"DATA EMISSÃO ([0-9/]+)"
+    }
+
+    data = {key: "" for key in cnh_header}
+
+    for page in result.pages:
+        page_content = " ".join([line.content for line in page.lines])
+        print("========================================================================================")
+        print("page_content: \n", page_content)
+        print("type: \n", type(page_content))
+        print("========================================================================================")
+        for key, pattern in cnh_dict_patterns.items():
+            match = re.search(pattern, page_content)
+            if match:
+                data[key] = match.group(1).strip()
+    print("========================================================================================")
+    print("DATAFRAME: \n", pd.DataFrame([data]).T)
+    print("========================================================================================")
+    return pd.DataFrame([data])
+
 
 def analyze_uploaded_document(uploaded_file, document_type):
     client = DocumentAnalysisClient(endpoint=ENDPOINT, credential=AzureKeyCredential(API_KEY))
     document = uploaded_file.read()
     poller = client.begin_analyze_document("prebuilt-idDocument", document)
     result = poller.result()
-    # print(f"result: {result}")
+    print(f"result: {result}")
 
     if document_type in ["CNH_Verso", "CNH_Aberta", "CNH_Frente"]:
         return cnh_process(result)
-
-    elif document_type in ["RG_Aberto", "RG_Frente", "RG_Verso"]:
-            return rg_process(result)
-
     else:
         data = []
         for page in result.pages:
@@ -133,23 +175,6 @@ def analyze_uploaded_document(uploaded_file, document_type):
                     "Content": line.content
                 })
         return pd.DataFrame(data)
-
-
-class Homepage:
-    def __init__(self):
-
-        st.title("Document Analysis with Azure")
-        document_type = st.selectbox("Select document type",
-                                     ["CNH_Verso", "CNH_Aberta", "CNH_Frente", "CPF_Frente", "CPF_Verso",
-                                      "RG_Aberto", "RG_Frente", "RG_Verso"])
-
-        uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png", "pdf"])
-
-        if uploaded_file is not None:
-            st.write("Analyzing uploaded document...")
-            df = analyze_uploaded_document(uploaded_file, document_type)
-            st.write(df)
-
 
 class Main:
 
@@ -189,9 +214,21 @@ class Main:
         )
 
         if option == 'Home':
-            Homepage()
+            st.title("Document Analysis with Azure")
+            document_type = st.selectbox("Select document type",
+                                         ["CNH_Verso", "CNH_Aberta", "CNH_Frente", "CPF_Frente", "CPF_Verso",
+                                          "RG_Aberto", "RG_Frente", "RG_Verso"])
+            uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png", "pdf"])
+            folder_path = st.text_input("Or enter a folder path to analyze all documents in it:")
 
+            if uploaded_file is not None:
+                st.write("Analyzing uploaded document...")
+                df = analyze_uploaded_document(uploaded_file, document_type)
+                st.write(df)
 
+            if folder_path:
+                st.write("Analyzing documents in folder...")
+                analyze_folder(folder_path)
 
             st.markdown("""Footer""")
 
