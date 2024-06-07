@@ -13,15 +13,15 @@ from azure.ai.formrecognizer import DocumentAnalysisClient
 
 load_dotenv()
 
-api_key = os.getenv("OPENAI_API_KEY")
-api_base = os.getenv("OPENAI_API_BASE")
+# api_key = os.getenv("OPENAI_API_KEY")
+# api_base = os.getenv("OPENAI_API_BASE")
 
 # Certifique-se de que as credenciais estão sendo lidas corretamente
 # if not api_key or not api_base:
 #     raise ValueError("API key or base URL not found. Please check your .env file.")
 
 # Instantiate the OpenAI client with your API key
-client = OpenAI(api_key=api_key)
+# client = OpenAI(api_key=api_key)
 
 def cnh_process(result):
     cnh_header = [
