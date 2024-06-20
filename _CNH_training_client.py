@@ -50,7 +50,7 @@ def cnh_process(result):
                 if field:
                     data.append({
                         "Nome do Campo": field_name_mapping.get(field_name, field_name),
-                        "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
+                        "Valor/Conteúdo": field.value_string if hasattr(field, 'value_string') else field.content,
                         "Confiança": field.confidence
                     })
     return pd.DataFrame(data)
