@@ -1,15 +1,13 @@
-import os
-import re
-import dotenv
+
 import streamlit as st
 import pandas as pd
 import yaml
-from openai import OpenAI
+
 from yaml.loader import SafeLoader
 from dotenv import load_dotenv
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.documentintelligence import DocumentIntelligenceClient
-from azure.ai.documentintelligence.models import DocumentAnalysisFeature, AnalyzeResult, AnalyzeDocumentRequest
+from azure.ai.documentintelligence.models import DocumentAnalysisFeature, AnalyzeDocumentRequest
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -18,11 +16,10 @@ ENDPOINT = "https://visiondocument01.cognitiveservices.azure.com/"
 API_KEY = "e30f60769b204e79ade3cd9ac8d1f389"
 
 
-# Mapeamento dos campos em inglês para português
 field_name_mapping = {
-    "FirstName": "Nome",
-    "LastName": "Sobrenome",
-    "DocumentNumber": "Número do Documento",
+    "LastName": "Nome",
+    "FirstName": "Sobrenome",
+    "DocumentNumber": "Número de Registro",
     "DateOfBirth": "Data de Nascimento",
     "DateOfExpiration": "Data de Expiração",
     "Sex": "Sexo",
@@ -32,19 +29,20 @@ field_name_mapping = {
     "CPF": "CPF",
     "Filiacao": "Filiação",
     "Validade": "Validade",
-    "Habilitacao": "Habilitação",
+    "Habilitacao": "1° Habilitação",
     "CatHab": "Categoria de Habilitação",
     "orgEmissor_UF": "Orgão Emissor/UF",
     "Data_Emissao": "Data de Emissão",
     "Local": "Local",
     "Doc_Identidade": "Documento de Identidade"
 }
+# Mapeamento dos campos em inglês para português
 
 def cnh_process(result):
     data = []
     if result.documents:
         for doc in result.documents:
-            fields_of_interest = ["FirstName", "LastName", "DocumentNumber", "DateOfBirth", "DateOfExpiration", "Sex", "Address", "CountryRegion", "Region", "CPF", "Filiacao", "Validade", "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local", "Doc_Identidade"]
+            fields_of_interest = ["LastName", "FirstName", "DocumentNumber", "DateOfBirth", "DateOfExpiration", "Sex", "Address", "CountryRegion", "Region", "CPF", "Filiacao", "Validade", "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local", "Doc_Identidade"]
             for field_name in fields_of_interest:
                 field = doc.fields.get(field_name)
                 if field:
