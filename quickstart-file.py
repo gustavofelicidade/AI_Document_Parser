@@ -4,8 +4,10 @@ from msrest.authentication import CognitiveServicesCredentials
 from PIL import Image, ImageDraw
 
 # Chave e endpoint
-KEY = "ba3d7342468c402a8ee5392f25775f92"
-ENDPOINT = "https://faceidcomputacional.cognitiveservices.azure.com/"
+KEY = "77e7c2bb59e44c8da77cf38e71ef000b"
+ENDPOINT = "https://face-api-qsti-dev-01.cognitiveservices.azure.com/"
+# KEY = "ba3d7342468c402a8ee5392f25775f92"
+# ENDPOINT = "https://faceidcomputacional.cognitiveservices.azure.com/"
 
 # Criar um cliente Face autenticado
 face_client = FaceClient(ENDPOINT, CognitiveServicesCredentials(KEY))
