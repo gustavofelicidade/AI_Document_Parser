@@ -46,13 +46,17 @@ field_name_mapping_rg = {
     "Assinatura_Do_Diretor": "Assinatura do Diretor"
 }
 
-def cnh_process(result):
+def cnh_process(result, side):
     data = []
     if result.documents:
         for doc in result.documents:
-            fields_of_interest = ["LastName", "FirstName", "DocumentNumber", "DateOfBirth", "DateOfExpiration", "Sex",
-                                  "Address", "CountryRegion", "Region", "CPF", "Filiacao", "Validade", "Habilitacao",
-                                  "CatHab", "orgEmissor_UF", "Data_Emissao", "Local", "Doc_Identidade"]
+            if side == "front":
+                fields_of_interest = ["LastName", "FirstName", "DocumentNumber", "DateOfBirth", "DateOfExpiration", "Sex",
+                                      "Address", "CountryRegion", "Region", "CPF", "Filiacao", "Validade", "Habilitacao",
+                                      "CatHab", "orgEmissor_UF", "Data_Emissao", "Local", "Doc_Identidade"]
+            else:
+                fields_of_interest = ["Local", "Data_Emissao", "Filiacao", "Validade"]
+
             for field_name in fields_of_interest:
                 field = doc.fields.get(field_name)
                 if field:
@@ -79,13 +83,17 @@ def rg_process(result):
                     })
     return pd.DataFrame(data)
 
-def analyze_uploaded_document(uploaded_file, document_type):
+def analyze_uploaded_document(uploaded_file, document_type, side=None):
     client = DocumentIntelligenceClient(endpoint=ENDPOINT, credential=AzureKeyCredential(API_KEY))
     document = uploaded_file.read()
 
     if document_type.startswith("CNH"):
-        query_fields = ["CPF", "Filiacao", "Validade", "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local",
-                        "Doc_Identidade", "FirstName", "LastName", "DateOfBirth", "DocumentNumber"]
+        if side == "front":
+            query_fields = ["CPF", "Filiacao", "Validade", "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local",
+                            "Doc_Identidade", "FirstName", "LastName", "DateOfBirth", "DocumentNumber"]
+        else:
+            query_fields = ["Local", "Data_Emissao", "Filiacao", "Validade"]
+
     elif document_type.startswith("RG"):
         query_fields = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Naturalidade", "Filiacao",
                         "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
@@ -100,7 +108,7 @@ def analyze_uploaded_document(uploaded_file, document_type):
     result = poller.result()
 
     if document_type.startswith("CNH"):
-        return cnh_process(result)
+        return cnh_process(result, side)
     elif document_type.startswith("RG"):
         return rg_process(result)
     else:
@@ -137,8 +145,8 @@ class Homepage:
                 if back_image:
                     st.image(back_image, caption="CNH Back Image", width=300)
                     st.write("Analyzing uploaded documents...")
-                    df_front = analyze_uploaded_document(front_image, "CNH_Frente")
-                    df_back = analyze_uploaded_document(back_image, "CNH_Verso")
+                    df_front = analyze_uploaded_document(front_image, "CNH", side="front")
+                    df_back = analyze_uploaded_document(back_image, "CNH", side="back")
                     st.write("CNH Front Data")
                     st.write(df_front)
                     st.write("CNH Back Data")
