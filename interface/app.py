@@ -1,3 +1,4 @@
+import json
 import streamlit as st
 import pandas as pd
 import yaml
@@ -46,42 +47,140 @@ field_name_mapping_rg = {
     "Assinatura_Do_Diretor": "Assinatura do Diretor"
 }
 
+# Carregar a lista de nomes comuns do JSON
+with open('C:/Users/Dell/Documents/SDLabs/AI_Document_Parser/AI_Vision/lista-de-nomes.json', 'r') as file:
+    nome_data = json.load(file)
+
+common_last_names = set(nome_data["common_last_names"])
+
+
+def separate_filiacao(filiacao):
+    # Verifica se o campo 'filiacao' está vazio
+    if not filiacao:
+        return "", ""
+
+    # Divide a ‘string’ de 'filiacao' em linhas, removendo espaços em branco
+    lines = [line.strip() for line in filiacao.split('\n') if line.strip()]
+    print(f"Lines: \n {lines}")
+
+    # Caso 1: Apenas uma linha
+    if len(lines) == 1:
+        # Divide a linha em nomes separados por espaços
+        names = lines[0].split()
+        # Calcula o ponto médio da lista de nomes
+        half = len(names) // 2
+        # A primeira metade dos nomes é atribuída ao pai
+        father_name = " ".join(names[:half])
+        # A segunda metade dos nomes é atribuída à mãe
+        mother_name = " ".join(names[half:])
+
+    # Caso 2: Duas linhas
+    elif len(lines) == 2:
+        # A primeira linha é o nome do pai
+        father_name = lines[0].strip()
+        # A segunda linha é o nome da mãe
+        mother_name = lines[1].strip()
+
+    # Caso 3: Três linhas
+    elif len(lines) == 3:
+        # Verifica se a segunda linha é um sobrenome comum
+        if lines[1].upper() in common_last_names:
+            # Se for, a primeira e segunda linhas juntas formam o nome do pai
+            father_name = lines[0].strip() + " " + lines[1].strip()
+            # A terceira linha é o nome da mãe
+            mother_name = lines[2].strip()
+        else:
+            # Caso contrário, a primeira linha é o nome do pai
+            father_name = lines[0].strip()
+            # E as duas últimas linhas formam o nome da mãe
+            mother_name = " ".join(lines[1:]).strip()
+
+    # Caso 4: Mais de três linhas
+    else:
+        # Verifica se a segunda ou terceira linha é um sobrenome comum
+        if lines[1].upper() in common_last_names or lines[2].upper() in common_last_names:
+            # Se for, as duas primeiras linhas formam o nome do pai
+            father_name = " ".join(lines[:2]).strip()
+            # E as duas últimas linhas formam o nome da mãe
+            mother_name = " ".join(lines[2:]).strip()
+        else:
+            # Caso contrário, a primeira linha é o nome do pai
+            father_name = lines[0].strip()
+            # E o restante das linhas formam o nome da mãe
+            mother_name = " ".join(lines[1:]).strip()
+
+    # Retorna os nomes do pai e da mãe
+    return father_name, mother_name
+
+
 def cnh_process(result, side):
     data = []
     if result.documents:
         for doc in result.documents:
             if side == "front":
-                fields_of_interest = ["LastName", "FirstName", "DocumentNumber", "DateOfBirth", "DateOfExpiration", "Sex",
-                                      "Address", "CountryRegion", "Region", "CPF", "Filiacao", "Validade", "Habilitacao",
-                                      "CatHab", "orgEmissor_UF", "Data_Emissao", "Local", "Doc_Identidade"]
+                fields_of_interest = ["LastName", "FirstName", "DocumentNumber", "DateOfBirth", "DateOfExpiration",
+                                      "Sex", "Address", "CountryRegion", "Region", "CPF", "Filiacao", "Validade",
+                                      "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local",
+                                      "Doc_Identidade"]
             else:
                 fields_of_interest = ["Local", "Data_Emissao", "Filiacao", "Validade"]
 
             for field_name in fields_of_interest:
                 field = doc.fields.get(field_name)
                 if field:
-                    data.append({
-                        "Nome do Campo": field_name_mapping.get(field_name, field_name),
-                        "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
-                        "Confiança": field.confidence
-                    })
+                    if field_name == "Filiacao":
+                        father_name, mother_name = separate_filiacao(
+                            field.content if hasattr(field, 'content') else field.value_string)
+                        data.append({
+                            "Nome do Campo": "Nome do Pai",
+                            "Valor/Conteúdo": father_name,
+                            "Confiança": field.confidence
+                        })
+                        data.append({
+                            "Nome do Campo": "Nome da Mãe",
+                            "Valor/Conteúdo": mother_name,
+                            "Confiança": field.confidence
+                        })
+                    else:
+                        data.append({
+                            "Nome do Campo": field_name_mapping.get(field_name, field_name),
+                            "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
+                            "Confiança": field.confidence
+                        })
     return pd.DataFrame(data)
+
 
 def rg_process(result):
     data = []
     if result.documents:
         for doc in result.documents:
-            fields_of_interest = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Data_De_Nascimento", "Naturalidade", "Filiacao",
-                                  "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
+            fields_of_interest = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Data_De_Nascimento", "Naturalidade",
+                                  "Filiacao", "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
+
             for field_name in fields_of_interest:
                 field = doc.fields.get(field_name)
                 if field:
-                    data.append({
-                        "Nome do Campo": field_name_mapping_rg.get(field_name, field_name),
-                        "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
-                        "Confiança": field.confidence
-                    })
+                    if field_name == "Filiacao":
+                        father_name, mother_name = separate_filiacao(
+                            field.content if hasattr(field, 'content') else field.value_string)
+                        data.append({
+                            "Nome do Campo": "Nome do Pai",
+                            "Valor/Conteúdo": father_name,
+                            "Confiança": field.confidence
+                        })
+                        data.append({
+                            "Nome do Campo": "Nome da Mãe",
+                            "Valor/Conteúdo": mother_name,
+                            "Confiança": field.confidence
+                        })
+                    else:
+                        data.append({
+                            "Nome do Campo": field_name_mapping_rg.get(field_name, field_name),
+                            "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
+                            "Confiança": field.confidence
+                        })
     return pd.DataFrame(data)
+
 
 def analyze_uploaded_document(uploaded_file, document_type, side=None):
     client = DocumentIntelligenceClient(endpoint=ENDPOINT, credential=AzureKeyCredential(API_KEY))
@@ -89,8 +188,8 @@ def analyze_uploaded_document(uploaded_file, document_type, side=None):
 
     if document_type.startswith("CNH"):
         if side == "front":
-            query_fields = ["CPF", "Filiacao", "Validade", "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local",
-                            "Doc_Identidade", "FirstName", "LastName", "DateOfBirth", "DocumentNumber"]
+            query_fields = ["CPF", "Filiacao", "Validade", "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao",
+                            "Local", "Doc_Identidade", "FirstName", "LastName", "DateOfBirth", "DocumentNumber"]
         else:
             query_fields = ["Local", "Data_Emissao", "Filiacao", "Validade"]
 
@@ -117,6 +216,7 @@ def analyze_uploaded_document(uploaded_file, document_type, side=None):
             for line in page.lines:
                 data.append({"Content": line.content})
         return pd.DataFrame(data)
+
 
 class Homepage:
     def __init__(self):
@@ -184,6 +284,7 @@ class Homepage:
         else:
             st.warning("Please upload the RG front image.")
             st.image("example_rg_front.jpg", caption="Example of correct RG front image", width=300)
+
 
 class Main:
     def __init__(self):

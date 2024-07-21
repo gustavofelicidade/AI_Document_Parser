@@ -36,25 +36,29 @@ field_name_mapping = {
 }
 
 field_name_mapping_rg = {
-    "Registro_Geral": "Registro_Geral",
+    "Registro_Geral": "Registro Geral",
     "Nome": "Nome",
-    "Data_De_Expedição": "Data_De_Expedição",
+    "Data_De_Expedicao": "Data de Expedição",
     "Naturalidade": "Naturalidade",
-    "Filiação": "Filiação",
-    "DocOrigem": "DocOrigem",
+    "Filiacao": "Filiação",
+    "DocOrigem": "Documento de Origem",
     "CPF": "CPF",
-    "Assinatura_Do_Diretor": "Assinatura_Do_Diretor",
-
+    "Assinatura_Do_Diretor": "Assinatura do Diretor"
 }
 
 
-def cnh_process(result):
+#   Dividir nomers no campo Filiação
+def cnh_process(result, side):
     data = []
     if result.documents:
         for doc in result.documents:
-            fields_of_interest = ["LastName", "FirstName", "DocumentNumber", "DateOfBirth", "DateOfExpiration", "Sex",
-                                  "Address", "CountryRegion", "Region", "CPF", "Filiacao", "Validade", "Habilitacao",
-                                  "CatHab", "orgEmissor_UF", "Data_Emissao", "Local", "Doc_Identidade"]
+            if side == "front":
+                fields_of_interest = ["LastName", "FirstName", "DocumentNumber", "DateOfBirth", "DateOfExpiration", "Sex",
+                                      "Address", "CountryRegion", "Region", "CPF", "Filiacao", "Validade", "Habilitacao",
+                                      "CatHab", "orgEmissor_UF", "Data_Emissao", "Local", "Doc_Identidade"]
+            else:
+                fields_of_interest = ["Local", "Data_Emissao", "Filiacao", "Validade"]
+
             for field_name in fields_of_interest:
                 field = doc.fields.get(field_name)
                 if field:
@@ -65,13 +69,11 @@ def cnh_process(result):
                     })
     return pd.DataFrame(data)
 
-
 def rg_process(result):
     data = []
     if result.documents:
         for doc in result.documents:
-            fields_of_interest = ["Registro_Geral", "Nome", "Data_De_Expedição", "Data_De_Nascimento", "Naturalidade",
-                                  "Filiação",
+            fields_of_interest = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Data_De_Nascimento", "Naturalidade", "Filiacao",
                                   "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
             for field_name in fields_of_interest:
                 field = doc.fields.get(field_name)
@@ -83,31 +85,40 @@ def rg_process(result):
                     })
     return pd.DataFrame(data)
 
-
-def analyze_uploaded_document(uploaded_file, document_type):
+def analyze_uploaded_document(uploaded_file, document_type, side=None):
     client = DocumentIntelligenceClient(endpoint=ENDPOINT, credential=AzureKeyCredential(API_KEY))
     document = uploaded_file.read()
+
+    if document_type.startswith("CNH"):
+        if side == "front":
+            query_fields = ["CPF", "Filiacao", "Validade", "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local",
+                            "Doc_Identidade", "FirstName", "LastName", "DateOfBirth", "DocumentNumber"]
+        else:
+            query_fields = ["Local", "Data_Emissao", "Filiacao", "Validade"]
+
+    elif document_type.startswith("RG"):
+        query_fields = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Naturalidade", "Filiacao",
+                        "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
 
     poller = client.begin_analyze_document(
         model_id="prebuilt-idDocument",
         analyze_request=AnalyzeDocumentRequest(bytes_source=document),
-
         features=[DocumentAnalysisFeature.QUERY_FIELDS],
-        query_fields=["CPF", "Filiacao", "Validade", "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local",
-                      "Doc_Identidade", "FirstName", "LastName", "DateOfBirth", "DocumentNumber"]
+        query_fields=query_fields
     )
 
     result = poller.result()
 
-    if document_type in ["CNH_Verso", "CNH_Aberta", "CNH_Frente"]:
-        return cnh_process(result)
+    if document_type.startswith("CNH"):
+        return cnh_process(result, side)
+    elif document_type.startswith("RG"):
+        return rg_process(result)
     else:
         data = []
         for page in result.pages:
             for line in page.lines:
                 data.append({"Content": line.content})
         return pd.DataFrame(data)
-
 
 class Homepage:
     def __init__(self):
@@ -123,21 +134,21 @@ class Homepage:
             self.upload_rg()
 
     def upload_cnh(self):
-
         st.write("Upload Imagem CNH Frente...")
         col1, col2 = st.columns(2)
         with col1:
             front_image = st.file_uploader("Upload Imagem CNH Frente...", type=["jpg", "jpeg", "png"], key="front")
         if front_image:
-            st.image(front_image, caption="CNH Front Image", width=600)
+            with col1:
+                st.image(front_image, caption="CNH Front Image", width=300)
             with col2:
                 st.write("Upload Imagem CNH Verso...")
                 back_image = st.file_uploader("Upload Imagem CNH Verso...", type=["jpg", "jpeg", "png"], key="back")
                 if back_image:
                     st.image(back_image, caption="CNH Back Image", width=300)
                     st.write("Analyzing uploaded documents...")
-                    df_front = analyze_uploaded_document(front_image, "CNH_Frente")
-                    df_back = analyze_uploaded_document(back_image, "CNH_Verso")
+                    df_front = analyze_uploaded_document(front_image, "CNH", side="front")
+                    df_back = analyze_uploaded_document(back_image, "CNH", side="back")
                     st.write("CNH Front Data")
                     st.write(df_front)
                     st.write("CNH Back Data")
@@ -150,17 +161,31 @@ class Homepage:
             st.image("example_cnh_front.jpg", caption="Example of correct CNH front image", width=300)
 
     def upload_rg(self):
-        rg_image = st.file_uploader("Upload RG Image...", type=["jpg", "jpeg", "png"])
-        if rg_image:
-            st.image(rg_image, caption="RG Image", width=400)
-            st.write("Analyzing uploaded document...")
-            df = analyze_uploaded_document(rg_image, "RG_Aberto")
-            st.write("RG Data")
-            st.write(df)
+        st.write("Upload Imagem RG Frente...")
+        col1, col2 = st.columns(2)
+        with col1:
+            front_image = st.file_uploader("Upload Imagem RG Frente...", type=["jpg", "jpeg", "png"], key="front_rg")
+        if front_image:
+            with col1:
+                st.image(front_image, caption="RG Front Image", width=300)
+            with col2:
+                st.write("Upload Imagem RG Verso...")
+                back_image = st.file_uploader("Upload Imagem RG Verso...", type=["jpg", "jpeg", "png"], key="back_rg")
+                if back_image:
+                    st.image(back_image, caption="RG Back Image", width=300)
+                    st.write("Analyzing uploaded documents...")
+                    df_front = analyze_uploaded_document(front_image, "RG_Frente")
+                    df_back = analyze_uploaded_document(back_image, "RG_Verso")
+                    st.write("RG Front Data")
+                    st.write(df_front)
+                    st.write("RG Back Data")
+                    st.write(df_back)
+                else:
+                    st.warning("Please upload a Imagem do Verso do RG.")
+                    st.image("example_rg_back.jpg", caption="Examplo de imagem RG Verso correta", width=300)
         else:
-            st.warning("Please upload the RG image.")
-            st.image("example_rg.jpg", caption="Examplo de imagem RG correta", width=400)
-
+            st.warning("Please upload the RG front image.")
+            st.image("example_rg_front.jpg", caption="Example of correct RG front image", width=300)
 
 class Main:
     def __init__(self):
