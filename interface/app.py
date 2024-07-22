@@ -2,6 +2,7 @@ import json
 import streamlit as st
 import pandas as pd
 import yaml
+import importlib.resources as pkg_resources
 
 from yaml.loader import SafeLoader
 from dotenv import load_dotenv
@@ -48,11 +49,10 @@ field_name_mapping_rg = {
 }
 
 # Carregar a lista de nomes comuns do JSON
-with open('C:/Users/Dell/Documents/SDLabs/AI_Document_Parser/AI_Vision/lista-de-nomes.json', 'r') as file:
+with pkg_resources.open_text('resources', 'lista-de-nomes.json') as file:
     nome_data = json.load(file)
 
-common_last_names = set(nome_data["common_last_names"])
-
+common_last_names = {name.upper() for name in nome_data["common_last_names"]}
 
 def separate_filiacao(filiacao):
     # Verifica se o campo 'filiacao' está vazio
@@ -111,7 +111,6 @@ def separate_filiacao(filiacao):
 
     # Retorna os nomes do pai e da mãe
     return father_name, mother_name
-
 
 def cnh_process(result, side):
     data = []
