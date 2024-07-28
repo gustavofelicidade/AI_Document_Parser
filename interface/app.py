@@ -1,3 +1,4 @@
+import os
 import json
 import streamlit as st
 import pandas as pd
@@ -13,8 +14,14 @@ from azure.ai.documentintelligence.models import DocumentAnalysisFeature, Analyz
 # Carregar variáveis de ambiente
 load_dotenv()
 
-ENDPOINT = "https://visiondocument01.cognitiveservices.azure.com/"
-API_KEY = "e30f60769b204e79ade3cd9ac8d1f389"
+# ENDPOINT = "https://visiondocument01.cognitiveservices.azure.com/"
+# API_KEY = "e30f60769b204e79ade3cd9ac8d1f389"
+
+# Carregar as credenciais do .env
+ENDPOINT = os.getenv("ENDPOINT")
+API_KEY = os.getenv("API_KEY")
+print(f"ENDPOINT: {ENDPOINT} \n  API_KEY: {API_KEY}")
+
 
 field_name_mapping = {
     "LastName": "Nome",
@@ -111,6 +118,7 @@ def separate_filiacao(filiacao):
 
     # Retorna os nomes do pai e da mãe
     return father_name, mother_name
+
 
 def cnh_process(result, side):
     data = []
