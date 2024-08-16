@@ -46,7 +46,7 @@ load_dotenv()
 # RAILWAY Postgres Database
 # Função para inicializar a conexão com o banco de dados usando a URL completa
 def init_connection():
-    return psycopg2.connect(os.getenv("DATABASE_PUBLIC_URL"))
+    return psycopg2.connect("postgresql://postgres:NpSHCrCCkaRwweKqRGEVgpYyoGdIPUAn@viaduct.proxy.rlwy.net:57554/railway")
 
 conn = init_connection()
 cur = conn.cursor()
