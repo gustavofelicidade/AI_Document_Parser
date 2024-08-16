@@ -4,18 +4,17 @@ import streamlit as st
 import pandas as pd
 import yaml
 import importlib.resources as pkg_resources
-
+from datetime import datetime
 from yaml.loader import SafeLoader
 from dotenv import load_dotenv
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.ai.documentintelligence.models import DocumentAnalysisFeature, AnalyzeDocumentRequest
 
+import resources.database as db
+
 # Carregar variáveis de ambiente
 load_dotenv()
-
-# ENDPOINT = "https://visiondocument01.cognitiveservices.azure.com/"
-# API_KEY = "e30f60769b204e79ade3cd9ac8d1f389"
 
 # Carregar as credenciais do .env
 ENDPOINT = os.getenv("ENDPOINT")
@@ -60,6 +59,27 @@ with pkg_resources.open_text('resources', 'lista-de-nomes.json') as file:
     nome_data = json.load(file)
 
 common_last_names = {name.upper() for name in nome_data["common_last_names"]}
+
+
+def save_image(uploaded_file):
+    """Salva a imagem do documento e insere no banco de dados."""
+    # Salvar a imagem no servidor
+    upload_dir = "uploads"
+    if not os.path.exists(upload_dir):
+        os.makedirs(upload_dir)
+
+    file_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uploaded_file.name}"
+    file_path = os.path.join(upload_dir, file_name)
+
+    with open(file_path, "wb") as f:
+        file_data = uploaded_file.getbuffer()
+        f.write(file_data)
+
+    # Inserir a imagem no banco de dados
+    db.insert_image(file_path, file_data)
+
+    return file_path
+
 
 def separate_filiacao(filiacao):
     # Verifica se o campo 'filiacao' está vazio
@@ -246,6 +266,11 @@ class Homepage:
         if front_image:
             with col1:
                 st.image(front_image, caption="CNH Front Image", width=300)
+
+            # Salvar a imagem e inserir no banco de dados
+            file_path = save_image(front_image)
+            st.success(f"Imagem salva em: {file_path}")
+
             with col2:
                 st.write("Upload Imagem CNH Verso...")
                 back_image = st.file_uploader("Upload Imagem CNH Verso...", type=["jpg", "jpeg", "png"], key="back")
@@ -273,6 +298,14 @@ class Homepage:
         if front_image:
             with col1:
                 st.image(front_image, caption="RG Front Image", width=300)
+
+            # Salvar a imagem
+            file_path = save_image(front_image)
+            st.success(f"Imagem salva em: {file_path}")
+
+            # Salvar no banco de dados
+            db.insert(file_path)
+
             with col2:
                 st.write("Upload Imagem RG Verso...")
                 back_image = st.file_uploader("Upload Imagem RG Verso...", type=["jpg", "jpeg", "png"], key="back_rg")
