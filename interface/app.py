@@ -62,23 +62,17 @@ common_last_names = {name.upper() for name in nome_data["common_last_names"]}
 
 
 def save_image(uploaded_file):
-    """Salva a imagem do documento e insere no banco de dados."""
-    # Salvar a imagem no servidor
-    upload_dir = "uploads"
-    if not os.path.exists(upload_dir):
-        os.makedirs(upload_dir)
-
+    """Salva a imagem do documento e insere no Blob Storage."""
     file_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uploaded_file.name}"
-    file_path = os.path.join(upload_dir, file_name)
 
-    with open(file_path, "wb") as f:
-        file_data = uploaded_file.getbuffer()
-        f.write(file_data)
+    # Obter os dados do arquivo como bytes
+    file_data = uploaded_file.getbuffer()
 
-    # Inserir a imagem no banco de dados
-    db.insert_image(file_path, file_data)
+    # Fazer o upload da imagem para o Blob Storage
+    db.upload_image_to_blob(file_name, file_data)
 
-    return file_path
+    return file_name
+
 
 
 def separate_filiacao(filiacao):
