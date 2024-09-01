@@ -5,7 +5,6 @@ from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 from dotenv import load_dotenv
 
 # Carregar variáveis de ambiente
-# Carregar variáveis de ambiente
 load_dotenv()
 
 # Configurar a conexão com o Azurite

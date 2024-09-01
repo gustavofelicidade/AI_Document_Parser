@@ -74,7 +74,6 @@ def save_image(uploaded_file):
     return file_name
 
 
-
 def separate_filiacao(filiacao):
     # Verifica se o campo 'filiacao' está vazio
     if not filiacao:
@@ -144,7 +143,7 @@ def cnh_process(result, side):
                                       "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local",
                                       "Doc_Identidade"]
             else:
-                fields_of_interest = ["Local", "Data_Emissao", "Filiacao", "Validade"]
+                fields_of_interest = ["Local", "Data_Emissao", "Validade"]
 
             for field_name in fields_of_interest:
                 field = doc.fields.get(field_name)
@@ -259,6 +258,8 @@ class Homepage:
             front_image = st.file_uploader("Upload Imagem CNH Frente...", type=["jpg", "jpeg", "png"], key="front")
         if front_image:
             with col1:
+
+                #  Mostra a CNH fornecida
                 st.image(front_image, caption="CNH Front Image", width=300)
 
             # Salvar a imagem e inserir no banco de dados
@@ -268,8 +269,15 @@ class Homepage:
             with col2:
                 st.write("Upload Imagem CNH Verso...")
                 back_image = st.file_uploader("Upload Imagem CNH Verso...", type=["jpg", "jpeg", "png"], key="back")
+
+                # Espera inserir o verso da CNH para prosseguir
                 if back_image:
                     st.image(back_image, caption="CNH Back Image", width=300)
+
+                    # Salvar a imagem e inserir no banco de dados
+                    file_path = save_image(back_image)
+                    st.success(f"Imagem salva em: {file_path}")
+
                     st.write("Analyzing uploaded documents...")
                     df_front = analyze_uploaded_document(front_image, "CNH", side="front")
                     df_back = analyze_uploaded_document(back_image, "CNH", side="back")
@@ -293,24 +301,25 @@ class Homepage:
             with col1:
                 st.image(front_image, caption="RG Front Image", width=300)
 
-            # Salvar a imagem
+            # Salvar a imagem no Blob Storage
             file_path = save_image(front_image)
             st.success(f"Imagem salva em: {file_path}")
-
-            # Salvar no banco de dados
-            db.insert(file_path)
 
             with col2:
                 st.write("Upload Imagem RG Verso...")
                 back_image = st.file_uploader("Upload Imagem RG Verso...", type=["jpg", "jpeg", "png"], key="back_rg")
                 if back_image:
                     st.image(back_image, caption="RG Back Image", width=300)
+                    # Salvar a imagem e inserir no banco de dados
+                    file_path = save_image(back_image)
+                    st.success(f"Imagem salva em: {file_path}")
+
                     st.write("Analyzing uploaded documents...")
-                    df_front = analyze_uploaded_document(front_image, "RG_Frente")
+                    # Não tem muita coisa na frente do RG e sim no verso
+                    # df_front = analyze_uploaded_document(front_image, "RG_Frente")
                     df_back = analyze_uploaded_document(back_image, "RG_Verso")
-                    st.write("RG Front Data")
-                    st.write(df_front)
-                    st.write("RG Back Data")
+
+                    st.write("Dados da Identidade")
                     st.write(df_back)
                 else:
                     st.warning("Please upload a Imagem do Verso do RG.")
