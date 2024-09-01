@@ -342,7 +342,7 @@ class Main:
 
         with col1:
             st.markdown("# AI Vision 👁️")
-            st.write("Follow the next steps to extract data from the documents:")
+            st.write("Siga os próximos passos para extrair dados dos documentos:")
 
         st.warning("Insira a imagem do Documento para processar", icon="⚠️")
 
