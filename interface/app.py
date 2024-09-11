@@ -147,12 +147,13 @@ def cnh_process(result, side):
             else:
                 fields_of_interest = ["Local", "Data_Emissao", "Validade"]
 
-            # Laço aninhado para acessar elementos do doc.fields
+            # Laço para verificar e processar os campos de interesse do doc.fields
             for field_name in fields_of_interest:
                 field = doc.fields.get(field_name)
                 if field:
                     field_list.append(field.content)
                     print(f"Field Name: {field.content}")
+
                     if field_name == "Filiacao":
                         father_name, mother_name = separate_filiacao(
                             field.content if hasattr(field, 'content') else field.value_string)
@@ -177,10 +178,10 @@ def cnh_process(result, side):
             # Contar quantos campos estão ausentes (None) na field_list
             missing_fields_count = field_list.count(None)
             if missing_fields_count >= required_fields_count:
-                # st.error("Documento de CNH não identificado, por favor tente novamente.")
+                st.error("Documento de CNH não identificado, por favor tente novamente.")
                 st.error(f"Campos ausentes: {missing_fields_count}")
                 # st.error(f"Número máximo de campos ausentes permitidos: {required_fields_count}")
-                st.error(f"Por favor insira o Documento novamente")
+                # st.error(f"Por favor insira o Documento novamente")
                 return None  # Retorna nada
 
             print(f"Field List: {field_list}")
@@ -236,38 +237,6 @@ def rg_process(result):
             print(f"Field List: {field_list}")
 
     return pd.DataFrame(data)
-
-
-# def rg_process(result):
-#     data = []
-#     if result.documents:
-#         for doc in result.documents:
-#             fields_of_interest = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Data_De_Nascimento", "Naturalidade",
-#                                   "Filiacao", "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
-#
-#             for field_name in fields_of_interest:
-#                 field = doc.fields.get(field_name)
-#                 if field:
-#                     if field_name == "Filiacao":
-#                         father_name, mother_name = separate_filiacao(
-#                             field.content if hasattr(field, 'content') else field.value_string)
-#                         data.append({
-#                             "Nome do Campo": "Nome do Pai",
-#                             "Valor/Conteúdo": father_name,
-#                             "Confiança": field.confidence
-#                         })
-#                         data.append({
-#                             "Nome do Campo": "Nome da Mãe",
-#                             "Valor/Conteúdo": mother_name,
-#                             "Confiança": field.confidence
-#                         })
-#                     else:
-#                         data.append({
-#                             "Nome do Campo": field_name_mapping_rg.get(field_name, field_name),
-#                             "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
-#                             "Confiança": field.confidence
-#                         })
-#     return pd.DataFrame(data)
 
 
 def analyze_uploaded_document(uploaded_file, document_type, side=None):
