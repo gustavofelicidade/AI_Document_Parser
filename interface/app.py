@@ -21,7 +21,6 @@ ENDPOINT = os.getenv("ENDPOINT")
 API_KEY = os.getenv("API_KEY")
 print(f"ENDPOINT: {ENDPOINT} \n  API_KEY: {API_KEY}")
 
-
 field_name_mapping = {
     "LastName": "Nome",
     "FirstName": "Sobrenome",
@@ -135,6 +134,9 @@ def separate_filiacao(filiacao):
 
 def cnh_process(result, side):
     data = []
+    missing_fields_count = 0  # Contador de campos ausentes
+    required_fields_count = 3  # Número máximo de campos ausentes permitidos
+    field_list = []
     if result.documents:
         for doc in result.documents:
             if side == "front":
@@ -145,9 +147,12 @@ def cnh_process(result, side):
             else:
                 fields_of_interest = ["Local", "Data_Emissao", "Validade"]
 
+            # Laço aninhado para acessar elementos do doc.fields
             for field_name in fields_of_interest:
                 field = doc.fields.get(field_name)
                 if field:
+                    field_list.append(field.content)
+                    print(f"Field Name: {field.content}")
                     if field_name == "Filiacao":
                         father_name, mother_name = separate_filiacao(
                             field.content if hasattr(field, 'content') else field.value_string)
@@ -167,6 +172,18 @@ def cnh_process(result, side):
                             "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
                             "Confiança": field.confidence
                         })
+                # else:
+                #     print(f"Faltando {field}")
+                #     missing_fields_count += 1
+
+            # Contar quantos campos estão ausentes (None) na field_list
+            missing_fields_count = field_list.count(None)
+            if missing_fields_count >= required_fields_count:
+                # st.error("Documento de CNH não identificado, por favor tente novamente.")
+                st.error(f"Campos ausentes: {missing_fields_count} \n Número máximo de campos ausentes permitidos: {required_fields_count}")
+                # return pd.DataFrame()  # Retorna um DataFrame vazio para não exibir dados incorretos
+
+            print(f"Field List: {field_list}")
     return pd.DataFrame(data)
 
 
@@ -206,6 +223,8 @@ def analyze_uploaded_document(uploaded_file, document_type, side=None):
     client = DocumentIntelligenceClient(endpoint=ENDPOINT, credential=AzureKeyCredential(API_KEY))
     document = uploaded_file.read()
 
+    # Definição da Lista de Parametros da Requição conforme o tipo de documento
+    #######################################################################################################
     if document_type.startswith("CNH"):
         if side == "front":
             query_fields = ["CPF", "Filiacao", "Validade", "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao",
@@ -217,6 +236,9 @@ def analyze_uploaded_document(uploaded_file, document_type, side=None):
         query_fields = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Naturalidade", "Filiacao",
                         "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
 
+    #######################################################################################################
+
+    # Modelo da Requição
     poller = client.begin_analyze_document(
         model_id="prebuilt-idDocument",
         analyze_request=AnalyzeDocumentRequest(bytes_source=document),
@@ -224,8 +246,10 @@ def analyze_uploaded_document(uploaded_file, document_type, side=None):
         query_fields=query_fields
     )
 
+    # Resultado da Requição
     result = poller.result()
 
+    # Avaliar conforme o document_type
     if document_type.startswith("CNH"):
         return cnh_process(result, side)
     elif document_type.startswith("RG"):
@@ -240,7 +264,7 @@ def analyze_uploaded_document(uploaded_file, document_type, side=None):
 
 class Homepage:
     def __init__(self):
-        st.title("Document Analysis with Azure")
+        st.title("Análise de Documentos com Azure")
         self.upload_documents()
 
     def upload_documents(self):
@@ -266,6 +290,7 @@ class Homepage:
             file_path = save_image(front_image)
             st.success(f"Imagem salva em: {file_path}")
 
+            # Espera confirmação da Frente da CNH para aparecer a opção do Verso.
             with col2:
                 st.write("Upload Imagem CNH Verso...")
                 back_image = st.file_uploader("Upload Imagem CNH Verso...", type=["jpg", "jpeg", "png"], key="back")
@@ -286,11 +311,11 @@ class Homepage:
                     st.write("CNH Back Data")
                     st.write(df_back)
                 else:
-                    st.warning("Please upload a Imagem do Verso da CNH.")
-                    st.image("example_cnh_back.jpg", caption="Examplo de imagem CNH Verso correta", width=300)
+                    st.warning("Por favor upload a Imagem do Verso da CNH.")
+                    st.image("example_cnh_back.jpg", caption="Exemplo de imagem CNH Verso correta", width=300)
         else:
-            st.warning("Please upload the CNH front image.")
-            st.image("example_cnh_front.jpg", caption="Example of correct CNH front image", width=300)
+            st.warning("Por favor upload a Imagem do Frente da CNH.")
+            st.image("example_cnh_front.jpg", caption="Exemplo correto da imagem CNH frente ", width=300)
 
     def upload_rg(self):
         st.write("Upload Imagem RG Frente...")
@@ -346,7 +371,7 @@ class Main:
 
         st.warning("Insira a imagem do Documento para processar", icon="⚠️")
 
-        # Sidebar
+        # Sidebar: Menu Lateral
         global name
         name = "Client"
         st.sidebar.title(f"Welcome {name}")
@@ -356,7 +381,7 @@ class Main:
             self.logout()
 
         option = st.sidebar.radio(
-            'Navigate through various features of the app!',
+            'Página Home definida',
             ('Home', 'Dashboard'),
             key="main_option"
         )
