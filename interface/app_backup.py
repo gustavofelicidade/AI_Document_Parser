@@ -137,6 +137,8 @@ def cnh_process(result, side):
     missing_fields_count = 0  # Contador de campos ausentes
     required_fields_count = 4  # Número máximo de campos ausentes permitidos
     field_list = []
+    first_name = ""
+    last_name = ""
     if result.documents:
         for doc in result.documents:
             if side == "front":
@@ -167,6 +169,13 @@ def cnh_process(result, side):
                             "Valor/Conteúdo": mother_name,
                             "Confiança": field.confidence
                         })
+                    elif field_name in ["FirstName", "LastName"]:
+                        # Store the first name and last name
+                        if field_name == "FirstName":
+                            first_name = field.content if hasattr(field, 'content') else field.value_string
+                        else:
+                            last_name = field.content if hasattr(field, 'content') else field.value_string
+                        # We will combine them later
                     else:
                         data.append({
                             "Nome do Campo": field_name_mapping.get(field_name, field_name),
@@ -174,14 +183,23 @@ def cnh_process(result, side):
                             "Confiança": field.confidence
                         })
 
+            # After processing all fields, combine last name and first name
+            full_name = f"{last_name} {first_name}".strip()
+            if full_name:
+                data.insert(0, {  # Insert at the beginning
+                    "Nome do Campo": "Nome",
+                    "Valor/Conteúdo": full_name,
+                    "Confiança": min(
+                        field.confidence for field_name in ["FirstName", "LastName"]
+                        if (field := doc.fields.get(field_name))
+                    )
+                })
 
             # Contar quantos campos estão ausentes (None) na field_list
             missing_fields_count = field_list.count(None)
             if missing_fields_count >= required_fields_count:
                 st.error("Documento de CNH não identificado, por favor tente novamente.")
                 st.error(f"Campos ausentes: {missing_fields_count}")
-                # st.error(f"Número máximo de campos ausentes permitidos: {required_fields_count}")
-                # st.error(f"Por favor insira o Documento novamente")
                 return None  # Retorna nada
 
             print(f"Field List: {field_list}")
@@ -193,10 +211,11 @@ def rg_process(result):
     missing_fields_count = 0  # Contador de campos ausentes
     required_fields_count = 4  # Número máximo de campos ausentes permitidos
     field_list = []  # Lista para armazenar os campos encontrados
-
+    first_name = ""
+    last_name = ""
     if result.documents:
         for doc in result.documents:
-            fields_of_interest = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Data_De_Nascimento", "Naturalidade",
+            fields_of_interest = ["Registro_Geral", "Nome", "FirstName", "LastName", "Data_De_Expedicao", "Data_De_Nascimento", "Naturalidade",
                                   "Filiacao", "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
 
             # Laço para verificar e processar os campos de interesse
@@ -217,6 +236,11 @@ def rg_process(result):
                             "Valor/Conteúdo": mother_name,
                             "Confiança": field.confidence
                         })
+                    elif field_name in ["FirstName", "LastName"]:
+                        if field_name == "FirstName":
+                            first_name = field.content if hasattr(field, 'content') else field.value_string
+                        else:
+                            last_name = field.content if hasattr(field, 'content') else field.value_string
                     else:
                         data.append({
                             "Nome do Campo": field_name_mapping_rg.get(field_name, field_name),
@@ -226,11 +250,30 @@ def rg_process(result):
                 else:
                     field_list.append(None)  # Adiciona None se o campo estiver ausente
 
+            # After processing all fields, combine last name and first name
+            full_name = f"{last_name} {first_name}".strip()
+            if full_name:
+                data.insert(0, {
+                    "Nome do Campo": "Nome",
+                    "Valor/Conteúdo": full_name,
+                    "Confiança": min(
+                        field.confidence for field_name in ["FirstName", "LastName"]
+                        if (field := doc.fields.get(field_name))
+                    )
+                })
+            elif doc.fields.get("Nome"):
+                # If only "Nome" field is present
+                field = doc.fields.get("Nome")
+                data.insert(0, {
+                    "Nome do Campo": "Nome",
+                    "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
+                    "Confiança": field.confidence
+                })
+
             # Contar quantos campos estão ausentes (None) na field_list
             missing_fields_count = field_list.count(None)
             if missing_fields_count >= required_fields_count:
                 st.error(f"Documento de RG não identificado. Campos ausentes: {missing_fields_count}")
-                # st.error(f"Número máximo de campos ausentes permitidos: {required_fields_count}")
                 st.error(f"Por favor, insira o Documento de RG novamente.")
                 return None  # Retorna nada para indicar que o documento não foi identificado corretamente
 
