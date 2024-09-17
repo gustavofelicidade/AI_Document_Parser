@@ -198,7 +198,7 @@ def cnh_process(result, side):
             # Contar quantos campos estão ausentes (None) na field_list
             missing_fields_count = field_list.count(None)
             if missing_fields_count >= required_fields_count:
-                st.error("Documento de CNH não identificado, por favor tente novamente.")
+                # st.error("Documento de CNH (frente) não identificado corretamente. Por favor, tente novamente.")
                 st.error(f"Campos ausentes: {missing_fields_count}")
                 return None  # Retorna nada
 
@@ -343,6 +343,7 @@ class Homepage:
         elif document_type == "RG":
             self.upload_rg()
 
+
     def upload_cnh(self):
         st.write("Upload Imagem CNH Frente...")
         col1, col2 = st.columns(2)
@@ -350,7 +351,6 @@ class Homepage:
             front_image = st.file_uploader("Upload Imagem CNH Frente...", type=["jpg", "jpeg", "png"], key="front")
         if front_image:
             with col1:
-
                 #  Mostra a CNH fornecida
                 st.image(front_image, caption="CNH Front Image", width=300)
 
@@ -358,32 +358,43 @@ class Homepage:
             file_path = save_image(front_image)
             st.success(f"Imagem salva em: {file_path}")
 
-            # Espera confirmação da Frente da CNH para aparecer a opção do Verso.
-            with col2:
-                st.write("Upload Imagem CNH Verso...")
-                back_image = st.file_uploader("Upload Imagem CNH Verso...", type=["jpg", "jpeg", "png"], key="back")
+            # Analisar o lado da frente da CNH
+            st.write("Analisando documento da frente...")
+            df_front = analyze_uploaded_document(front_image, "CNH", side="front")
 
-                # Espera inserir o verso da CNH para prosseguir
-                if back_image:
-                    st.image(back_image, caption="CNH Back Image", width=300)
+            # Verifica se o lado da frente foi validado corretamente
+            if df_front is not None and not df_front.empty:
+                # Se o lado da frente for válido, permite o "upload" do verso
+                with col2:
+                    st.write("Upload Imagem CNH Verso...")
+                    back_image = st.file_uploader("Upload Imagem CNH Verso...", type=["jpg", "jpeg", "png"], key="back")
 
-                    # Salvar a imagem e inserir no banco de dados
-                    file_path = save_image(back_image)
-                    st.success(f"Imagem salva em: {file_path}")
+                    if back_image:
+                        st.image(back_image, caption="CNH Back Image", width=300)
 
-                    st.write("Analyzing uploaded documents...")
-                    df_front = analyze_uploaded_document(front_image, "CNH", side="front")
-                    df_back = analyze_uploaded_document(back_image, "CNH", side="back")
-                    st.write("CNH Front Data")
-                    st.write(df_front)
-                    st.write("CNH Back Data")
-                    st.write(df_back)
-                else:
-                    st.warning("Por favor upload a Imagem do Verso da CNH.")
-                    st.image("example_cnh_back.jpg", caption="Exemplo de imagem CNH Verso correta", width=300)
+                        # Salvar a imagem e inserir no banco de dados
+                        file_path = save_image(back_image)
+                        st.success(f"Imagem salva em: {file_path}")
+
+                        st.write("Analisando documento do verso...")
+                        df_back = analyze_uploaded_document(back_image, "CNH", side="back")
+
+                        # Verificar se o lado do verso foi validado corretamente
+                        if df_back is not None and not df_back.empty:
+                            # Exibe ambos os dataframes apenas após a validação do verso
+                            st.write("CNH Front Data")
+                            st.write(df_front)
+                            st.write("CNH Back Data")
+                            st.write(df_back)
+                        else:
+                            st.error("Documento de CNH (verso) não identificado corretamente.")
+                    else:
+                        st.warning("Por favor, insira a imagem do verso da CNH.")
+            else:
+                st.error("Documento de CNH (frente) não identificado corretamente. Por favor, tente novamente.")
         else:
-            st.warning("Por favor upload a Imagem do Frente da CNH.")
-            st.image("example_cnh_front.jpg", caption="Exemplo correto da imagem CNH frente ", width=300)
+            st.warning("Por favor, insira a imagem da frente da CNH.")
+
 
     def upload_rg(self):
         st.write("Upload Imagem RG Frente...")

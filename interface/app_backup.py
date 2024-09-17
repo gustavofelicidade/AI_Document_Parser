@@ -44,7 +44,7 @@ field_name_mapping = {
 
 field_name_mapping_rg = {
     "Registro_Geral": "Registro Geral",
-    "Nome": "Nome",
+    "Nome": "Nome Completo",
     "Data_De_Expedicao": "Data de Expedição",
     "Naturalidade": "Naturalidade",
     "Filiacao": "Filiação",
@@ -213,6 +213,7 @@ def rg_process(result):
     field_list = []  # Lista para armazenar os campos encontrados
     first_name = ""
     last_name = ""
+
     if result.documents:
         for doc in result.documents:
             fields_of_interest = ["Registro_Geral", "Nome", "FirstName", "LastName", "Data_De_Expedicao", "Data_De_Nascimento", "Naturalidade",
@@ -236,39 +237,41 @@ def rg_process(result):
                             "Valor/Conteúdo": mother_name,
                             "Confiança": field.confidence
                         })
-                    elif field_name in ["FirstName", "LastName"]:
-                        if field_name == "FirstName":
-                            first_name = field.content if hasattr(field, 'content') else field.value_string
-                        else:
-                            last_name = field.content if hasattr(field, 'content') else field.value_string
+                    # elif field_name in ["FirstName", "LastName"]:
+                    #     if field_name == "FirstName":
+                    #         first_name = field.content if hasattr(field, 'content') else field.value_string
+                    #     else:
+                    #         last_name = field.content if hasattr(field, 'content') else field.value_string
                     else:
                         data.append({
                             "Nome do Campo": field_name_mapping_rg.get(field_name, field_name),
                             "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
                             "Confiança": field.confidence
                         })
+                        print(f"field_name {field_name}")
                 else:
                     field_list.append(None)  # Adiciona None se o campo estiver ausente
 
-            # After processing all fields, combine last name and first name
-            full_name = f"{last_name} {first_name}".strip()
-            if full_name:
-                data.insert(0, {
-                    "Nome do Campo": "Nome",
-                    "Valor/Conteúdo": full_name,
-                    "Confiança": min(
-                        field.confidence for field_name in ["FirstName", "LastName"]
-                        if (field := doc.fields.get(field_name))
-                    )
-                })
-            elif doc.fields.get("Nome"):
-                # If only "Nome" field is present
-                field = doc.fields.get("Nome")
-                data.insert(0, {
-                    "Nome do Campo": "Nome",
-                    "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
-                    "Confiança": field.confidence
-                })
+            # # Após processar todos os campos, combine nome e sobrenome se ambos existirem
+            # full_name = f"{first_name} {last_name}".strip() if first_name or last_name else None
+            # if full_name:
+            #     data.insert(0, {  # Inserir no início da lista
+            #         "Nome do Campo": "Nome",
+            #         "Valor/Conteúdo": full_name,
+            #         "Confiança": min(
+            #             field.confidence for field_name in ["FirstName", "LastName"]
+            #             if (field := doc.fields.get(field_name))
+            #         )
+            #     })
+            #
+            # elif doc.fields.get("Nome") and not full_name:
+            #     # Se somente o campo "Nome" estiver presente, use esse
+            #     field = doc.fields.get("Nome")
+            #     data.insert(0, {
+            #         "Nome do Campo": "Nome",
+            #         "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
+            #         "Confiança": field.confidence
+            #     })
 
             # Contar quantos campos estão ausentes (None) na field_list
             missing_fields_count = field_list.count(None)
@@ -280,6 +283,8 @@ def rg_process(result):
             print(f"Field List: {field_list}")
 
     return pd.DataFrame(data)
+
+
 
 
 def analyze_uploaded_document(uploaded_file, document_type, side=None):
@@ -345,7 +350,6 @@ class Homepage:
             front_image = st.file_uploader("Upload Imagem CNH Frente...", type=["jpg", "jpeg", "png"], key="front")
         if front_image:
             with col1:
-
                 #  Mostra a CNH fornecida
                 st.image(front_image, caption="CNH Front Image", width=300)
 
@@ -353,32 +357,41 @@ class Homepage:
             file_path = save_image(front_image)
             st.success(f"Imagem salva em: {file_path}")
 
-            # Espera confirmação da Frente da CNH para aparecer a opção do Verso.
-            with col2:
-                st.write("Upload Imagem CNH Verso...")
-                back_image = st.file_uploader("Upload Imagem CNH Verso...", type=["jpg", "jpeg", "png"], key="back")
+            # Analisar o lado da frente da CNH
+            st.write("Analisando documento da frente...")
+            df_front = analyze_uploaded_document(front_image, "CNH", side="front")
 
-                # Espera inserir o verso da CNH para prosseguir
-                if back_image:
-                    st.image(back_image, caption="CNH Back Image", width=300)
+            # Verifica se o lado da frente foi validado corretamente
+            if df_front is not None and not df_front.empty:
+                st.write("CNH Front Data")
+                st.write(df_front)
 
-                    # Salvar a imagem e inserir no banco de dados
-                    file_path = save_image(back_image)
-                    st.success(f"Imagem salva em: {file_path}")
+                # Se o lado da frente for válido, permite o ‘upload’ do verso
+                with col2:
+                    st.write("Upload Imagem CNH Verso...")
+                    back_image = st.file_uploader("Upload Imagem CNH Verso...", type=["jpg", "jpeg", "png"], key="back")
 
-                    st.write("Analyzing uploaded documents...")
-                    df_front = analyze_uploaded_document(front_image, "CNH", side="front")
-                    df_back = analyze_uploaded_document(back_image, "CNH", side="back")
-                    st.write("CNH Front Data")
-                    st.write(df_front)
-                    st.write("CNH Back Data")
-                    st.write(df_back)
-                else:
-                    st.warning("Por favor upload a Imagem do Verso da CNH.")
-                    st.image("example_cnh_back.jpg", caption="Exemplo de imagem CNH Verso correta", width=300)
+                    if back_image:
+                        st.image(back_image, caption="CNH Back Image", width=300)
+
+                        # Salvar a imagem e inserir no banco de dados
+                        file_path = save_image(back_image)
+                        st.success(f"Imagem salva em: {file_path}")
+
+                        st.write("Analisando documento do verso...")
+                        df_back = analyze_uploaded_document(back_image, "CNH", side="back")
+
+                        if df_front is not None and not df_back.empty:
+                            st.write("CNH Back Data")
+                            st.write(df_back)
+                        else:
+                            st.error("Documento de CNH (verso) não identificado corretamente.")
+                    else:
+                        st.warning("Por favor, insira a imagem do verso da CNH.")
+            else:
+                st.error("Documento de CNH (frente) não identificado corretamente. Por favor, tente novamente.")
         else:
-            st.warning("Por favor upload a Imagem do Frente da CNH.")
-            st.image("example_cnh_front.jpg", caption="Exemplo correto da imagem CNH frente ", width=300)
+            st.warning("Por favor, insira a imagem da frente da CNH.")
 
     def upload_rg(self):
         st.write("Upload Imagem RG Frente...")
