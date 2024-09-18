@@ -187,7 +187,7 @@ def cnh_process(result, side):
             full_name = f"{last_name} {first_name}".strip()
             if full_name:
                 data.insert(0, {  # Insert at the beginning
-                    "Nome do Campo": "Nome",
+                    "Nome do Campo": "Nome Completo",
                     "Valor/Conteúdo": full_name,
                     "Confiança": min(
                         field.confidence for field_name in ["FirstName", "LastName"]
