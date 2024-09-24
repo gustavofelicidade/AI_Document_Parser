@@ -12,6 +12,9 @@ from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.ai.documentintelligence.models import DocumentAnalysisFeature, AnalyzeDocumentRequest
 
 import resources.database as db
+from Vision.face_recognition import detect_faces
+from PIL import Image
+import tempfile
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -344,6 +347,7 @@ class Homepage:
             self.upload_rg()
 
 
+
     def upload_cnh(self):
         st.write("Upload Imagem CNH Frente...")
         col1, col2 = st.columns(2)
@@ -386,6 +390,30 @@ class Homepage:
                             st.write(df_front)
                             st.write("CNH Back Data")
                             st.write(df_back)
+
+                            # Extração do nome completo
+                            nome_completo = \
+                            df_front[df_front['Nome do Campo'] == 'Nome Completo']['Valor/Conteúdo'].values[0]
+
+                            # Converter UploadedFile para JPG usando PIL e salvar temporariamente
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                                img = Image.open(front_image)  # Abrir o arquivo da CNH frente com PIL
+                                img.save(tmp.name)  # Salvar como .jpg
+                                tmp_path = tmp.name  # Caminho temporário da imagem .jpg
+
+                            # Detectar o rosto na imagem da frente
+                            st.write("Detectando rosto na imagem da frente...")
+                            face_path = detect_faces(tmp_path, nome_completo)  # Usar o caminho temporário da imagem
+
+                            if face_path:
+                                st.image(face_path, caption=f"Rosto de {nome_completo}", width=200)
+                                st.success(f"Rosto de {nome_completo} detectado e salvo.")
+
+                                # Salvar a imagem do rosto no Azure Blob Storage
+                                with open(face_path, "rb") as face_file:
+                                    db.upload_image_to_blob(f"{nome_completo}_face.jpg", face_file.read())
+                            else:
+                                st.warning(f"Rosto não detectado na CNH de {nome_completo}.")
                         else:
                             st.error("Documento de CNH (verso) não identificado corretamente.")
                     else:
@@ -394,7 +422,6 @@ class Homepage:
                 st.error("Documento de CNH (frente) não identificado corretamente. Por favor, tente novamente.")
         else:
             st.warning("Por favor, insira a imagem da frente da CNH.")
-
 
     def upload_rg(self):
         st.write("Upload Imagem RG Frente...")
