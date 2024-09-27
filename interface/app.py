@@ -441,23 +441,54 @@ class Homepage:
                 back_image = st.file_uploader("Upload Imagem RG Verso...", type=["jpg", "jpeg", "png"], key="back_rg")
                 if back_image:
                     st.image(back_image, caption="RG Back Image", width=300)
-                    # Salvar a imagem e inserir no banco de dados
+
+                    # Salvar a imagem do verso no Blob Storage
                     file_path = save_image(back_image)
                     st.success(f"Imagem salva em: {file_path}")
 
-                    st.write("Analyzing uploaded documents...")
-                    # Não tem muita coisa na frente do RG e sim no verso
-                    # df_front = analyze_uploaded_document(front_image, "RG_Frente")
+                    st.write("Analisando documento do verso...")
+                    # Análise dos dados do verso do RG
                     df_back = analyze_uploaded_document(back_image, "RG_Verso")
 
-                    st.write("Dados da Identidade")
-                    st.write(df_back)
+                    # Verificar se o lado do verso foi validado corretamente
+                    if df_back is not None and not df_back.empty:
+                        # Exibe os dados do verso do RG
+                        st.write("Dados do RG (Verso)")
+                        st.write(df_back)
+
+                        # Extração do nome completo do verso do RG
+                        nome_completo = df_back[df_back['Nome do Campo'] == 'Nome Completo']['Valor/Conteúdo'].values[0]
+
+                        # Converter UploadedFile para JPG usando PIL e salvar temporariamente
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                            img = Image.open(front_image)  # Abrir o arquivo da frente do RG com PIL
+
+                            # Se a imagem estiver em RGBA, converta para RGB
+                            if img.mode == 'RGBA':
+                                img = img.convert('RGB')
+
+                            img.save(tmp.name)  # Salvar como .jpg
+                            tmp_path = tmp.name  # Caminho temporário da imagem .jpg
+
+                        # Detectar o rosto na imagem da frente
+                        st.write("Detectando rosto na imagem da frente...")
+                        face_path = detect_faces(tmp_path, nome_completo)  # Usar o caminho temporário da imagem
+
+                        if face_path:
+                            st.image(face_path, caption=f"Rosto de {nome_completo}", width=200)
+                            st.success(f"Rosto de {nome_completo} detectado e salvo.")
+
+                            # Salvar a imagem do rosto no Azure Blob Storage
+                            with open(face_path, "rb") as face_file:
+                                db.upload_image_to_blob(f"{nome_completo}_face.jpg", face_file.read())
+                        else:
+                            st.warning(f"Rosto não detectado no RG de {nome_completo}.")
+                    else:
+                        st.error("Documento de RG (verso) não identificado corretamente.")
                 else:
-                    st.warning("Please upload a Imagem do Verso do RG.")
-                    st.image("example_rg_back.jpg", caption="Examplo de imagem RG Verso correta", width=300)
+                    st.warning("Por favor, insira a imagem do verso do RG.")
         else:
-            st.warning("Please upload the RG front image.")
-            st.image("example_rg_front.jpg", caption="Example of correct RG front image", width=300)
+            st.warning("Por favor, insira a imagem da frente do RG.")
 
 
 class Main:
