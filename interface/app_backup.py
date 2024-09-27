@@ -15,6 +15,9 @@ import resources.database as db
 from Vision.face_recognition import detect_faces
 from PIL import Image
 import tempfile
+# Processamento de Imagem
+from Vision.image_processing import evaluate_image_quality, assess_image_quality
+
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -436,11 +439,9 @@ class Homepage:
             file_path = save_image(front_image)
             st.success(f"Imagem salva em: {file_path}")
 
-            # Se a imagem da frente for válida, permite o upload do verso
             with col2:
                 st.write("Upload Imagem RG Verso...")
                 back_image = st.file_uploader("Upload Imagem RG Verso...", type=["jpg", "jpeg", "png"], key="back_rg")
-
                 if back_image:
                     st.image(back_image, caption="RG Back Image", width=300)
 
@@ -449,12 +450,13 @@ class Homepage:
                     st.success(f"Imagem salva em: {file_path}")
 
                     st.write("Analisando documento do verso...")
-                    df_back = analyze_uploaded_document(back_image, "RG", side="back")
+                    # Análise dos dados do verso do RG
+                    df_back = analyze_uploaded_document(back_image, "RG_Verso")
 
                     # Verificar se o lado do verso foi validado corretamente
                     if df_back is not None and not df_back.empty:
-                        # Exibe ambos os dataframes após a validação do verso
-                        st.write("RG Back Data")
+                        # Exibe os dados do verso do RG
+                        st.write("Dados do RG (Verso)")
                         st.write(df_back)
 
                         # Extração do nome completo do verso do RG
@@ -462,7 +464,12 @@ class Homepage:
 
                         # Converter UploadedFile para JPG usando PIL e salvar temporariamente
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-                            img = Image.open(front_image)  # Abrir o arquivo do RG frente com PIL
+                            img = Image.open(front_image)  # Abrir o arquivo da frente do RG com PIL
+
+                            # Se a imagem estiver em RGBA, converta para RGB
+                            if img.mode == 'RGBA':
+                                img = img.convert('RGB')
+
                             img.save(tmp.name)  # Salvar como .jpg
                             tmp_path = tmp.name  # Caminho temporário da imagem .jpg
 

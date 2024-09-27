@@ -2,6 +2,45 @@ import cv2
 import os
 from PIL import Image, ImageStat
 import numpy as np
+import pandas as pd
+
+# Mapeamento de métricas e resultados para PT-BR
+metric_translation = {
+    'Sharpness': 'Nitidez',
+    'Brightness': 'Brilho',
+    'Contrast': 'Contraste',
+    'Width': 'Largura',
+    'Height': 'Altura',
+    'Ratio': 'Proporção',
+    'ContainsFace': 'ContémFace',
+}
+
+result_translation = {
+    'Good': 'Boa',
+    'Poor': 'Ruim',
+}
+
+
+# Função para criar DataFrame de qualidade em PT-BR
+def create_quality_dataframe(metrics_front, report_front, metrics_back=None, report_back=None):
+    data = []
+
+    for metric, translated_metric in metric_translation.items():
+        front_value = metrics_front.get(metric, '-')
+        front_result = result_translation.get(report_front.get(metric, 'Ruim'), 'Ruim')
+
+        back_value = metrics_back.get(metric, '-') if metrics_back else '-'
+        back_result = result_translation.get(report_back.get(metric, 'Ruim'), 'Ruim') if report_back else '-'
+
+        data.append({
+            'Métrica': translated_metric,
+            'Frente Valor': front_value,
+            'Verso Valor': back_value,
+            'Frente Resultado': front_result,
+            'Verso Resultado': back_result
+        })
+
+    return pd.DataFrame(data)
 
 
 # Função para verificar a nitidez da imagem (usando variância do Laplaciano)
@@ -141,14 +180,15 @@ quality_metrics = {
     'ContainsFace': True
 }
 
-quality_report = assess_image_quality(quality_metrics)
-print(quality_report)
+# quality_report = assess_image_quality(quality_metrics)
+# print(quality_report)
+
 
 # Exemplo de uso
-if __name__ == "__main__":
-    image_path = r"C:/Users/Dell/Downloads/CNH Database/eduardocortadafrente.jpg"
-    quality_metrics = evaluate_image_quality(image_path)
-    print(quality_metrics)
-
-    quality_report = assess_image_quality(quality_metrics)
-    print(quality_report)
+# if __name__ == "__main__":
+#     image_path = r"C:/Users/Dell/Downloads/CNH Database/eduardocortadafrente.jpg"
+#     quality_metrics = evaluate_image_quality(image_path)
+#     print(quality_metrics)
+#
+#     quality_report = assess_image_quality(quality_metrics)
+#     print(quality_report)

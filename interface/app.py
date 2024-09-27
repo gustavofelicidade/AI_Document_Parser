@@ -15,6 +15,10 @@ import resources.database as db
 from Vision.face_recognition import detect_faces
 from PIL import Image
 import tempfile
+# Processamento de Imagem
+from Vision.image_processing import evaluate_image_quality, assess_image_quality
+from Vision.image_processing import metric_translation, result_translation, create_quality_dataframe
+
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -346,8 +350,6 @@ class Homepage:
         elif document_type == "RG":
             self.upload_rg()
 
-
-
     def upload_cnh(self):
         st.write("Upload Imagem CNH Frente...")
         col1, col2 = st.columns(2)
@@ -355,20 +357,15 @@ class Homepage:
             front_image = st.file_uploader("Upload Imagem CNH Frente...", type=["jpg", "jpeg", "png"], key="front")
         if front_image:
             with col1:
-                #  Mostra a CNH fornecida
                 st.image(front_image, caption="CNH Front Image", width=300)
 
-            # Salvar a imagem e inserir no banco de dados
             file_path = save_image(front_image)
             st.success(f"Imagem salva em: {file_path}")
 
-            # Analisar o lado da frente da CNH
             st.write("Analisando documento da frente...")
             df_front = analyze_uploaded_document(front_image, "CNH", side="front")
 
-            # Verifica se o lado da frente foi validado corretamente
             if df_front is not None and not df_front.empty:
-                # Se o lado da frente for válido, permite o "upload" do verso
                 with col2:
                     st.write("Upload Imagem CNH Verso...")
                     back_image = st.file_uploader("Upload Imagem CNH Verso...", type=["jpg", "jpeg", "png"], key="back")
@@ -376,50 +373,61 @@ class Homepage:
                     if back_image:
                         st.image(back_image, caption="CNH Back Image", width=300)
 
-                        # Salvar a imagem e inserir no banco de dados
                         file_path = save_image(back_image)
                         st.success(f"Imagem salva em: {file_path}")
 
                         st.write("Analisando documento do verso...")
                         df_back = analyze_uploaded_document(back_image, "CNH", side="back")
 
-                        # Verificar se o lado do verso foi validado corretamente
                         if df_back is not None and not df_back.empty:
-                            # Exibe ambos os dataframes apenas após a validação do verso
                             st.write("CNH Front Data")
                             st.write(df_front)
                             st.write("CNH Back Data")
                             st.write(df_back)
 
-                            # Extração do nome completo
                             nome_completo = \
                             df_front[df_front['Nome do Campo'] == 'Nome Completo']['Valor/Conteúdo'].values[0]
 
-                            # Converter UploadedFile para JPG usando PIL e salvar temporariamente
                             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-                                img = Image.open(front_image)  # Abrir o arquivo da CNH frente com PIL
-                                img.save(tmp.name)  # Salvar como .jpg
-                                tmp_path = tmp.name  # Caminho temporário da imagem .jpg
+                                img = Image.open(front_image)
+                                img.save(tmp.name)
+                                tmp_path = tmp.name
 
-                            # Detectar o rosto na imagem da frente
-                            st.write("Detectando rosto na imagem da frente...")
-                            face_path = detect_faces(tmp_path, nome_completo)  # Usar o caminho temporário da imagem
+                            st.write("Detectando rosto...")
+                            face_path = detect_faces(tmp_path, nome_completo)
 
                             if face_path:
                                 st.image(face_path, caption=f"Rosto de {nome_completo}", width=200)
                                 st.success(f"Rosto de {nome_completo} detectado e salvo.")
 
-                                # Salvar a imagem do rosto no Azure Blob Storage
                                 with open(face_path, "rb") as face_file:
                                     db.upload_image_to_blob(f"{nome_completo}_face.jpg", face_file.read())
-                            else:
-                                st.warning(f"Rosto não detectado na CNH de {nome_completo}.")
+
+                            # Avaliar a qualidade da frente e do verso da imagem
+                            quality_metrics_front = evaluate_image_quality(tmp_path)
+                            quality_report_front = assess_image_quality(quality_metrics_front)
+
+                            # Avaliação do verso da CNH
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_back:
+                                img_back = Image.open(back_image)
+                                img_back.save(tmp_back.name)
+                                tmp_back_path = tmp_back.name
+
+                            quality_metrics_back = evaluate_image_quality(tmp_back_path)
+                            quality_report_back = assess_image_quality(quality_metrics_back)
+
+                            # Exibir a qualidade da frente e do verso em um DataFrame
+                            st.write("Relatório de Qualidade da Imagem")
+                            quality_df = create_quality_dataframe(quality_metrics_front, quality_report_front,
+                                                                  quality_metrics_back, quality_report_back)
+                            st.dataframe(quality_df)
+
                         else:
                             st.error("Documento de CNH (verso) não identificado corretamente.")
                     else:
                         st.warning("Por favor, insira a imagem do verso da CNH.")
             else:
-                st.error("Documento de CNH (frente) não identificado corretamente. Por favor, tente novamente.")
+                st.error("Documento de CNH (frente) não identificado corretamente.")
         else:
             st.warning("Por favor, insira a imagem da frente da CNH.")
 
@@ -432,7 +440,6 @@ class Homepage:
             with col1:
                 st.image(front_image, caption="RG Front Image", width=300)
 
-            # Salvar a imagem no Blob Storage
             file_path = save_image(front_image)
             st.success(f"Imagem salva em: {file_path}")
 
@@ -442,47 +449,54 @@ class Homepage:
                 if back_image:
                     st.image(back_image, caption="RG Back Image", width=300)
 
-                    # Salvar a imagem do verso no Blob Storage
                     file_path = save_image(back_image)
                     st.success(f"Imagem salva em: {file_path}")
 
                     st.write("Analisando documento do verso...")
-                    # Análise dos dados do verso do RG
                     df_back = analyze_uploaded_document(back_image, "RG_Verso")
 
-                    # Verificar se o lado do verso foi validado corretamente
                     if df_back is not None and not df_back.empty:
-                        # Exibe os dados do verso do RG
                         st.write("Dados do RG (Verso)")
                         st.write(df_back)
 
-                        # Extração do nome completo do verso do RG
                         nome_completo = df_back[df_back['Nome do Campo'] == 'Nome Completo']['Valor/Conteúdo'].values[0]
 
-                        # Converter UploadedFile para JPG usando PIL e salvar temporariamente
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-                            img = Image.open(front_image)  # Abrir o arquivo da frente do RG com PIL
+                            img = Image.open(front_image)
 
-                            # Se a imagem estiver em RGBA, converta para RGB
                             if img.mode == 'RGBA':
                                 img = img.convert('RGB')
 
-                            img.save(tmp.name)  # Salvar como .jpg
-                            tmp_path = tmp.name  # Caminho temporário da imagem .jpg
+                            img.save(tmp.name)
+                            tmp_path = tmp.name
 
-                        # Detectar o rosto na imagem da frente
-                        st.write("Detectando rosto na imagem da frente...")
-                        face_path = detect_faces(tmp_path, nome_completo)  # Usar o caminho temporário da imagem
+                        st.write("Detectando rosto...")
+                        face_path = detect_faces(tmp_path, nome_completo)
 
                         if face_path:
                             st.image(face_path, caption=f"Rosto de {nome_completo}", width=200)
                             st.success(f"Rosto de {nome_completo} detectado e salvo.")
 
-                            # Salvar a imagem do rosto no Azure Blob Storage
                             with open(face_path, "rb") as face_file:
                                 db.upload_image_to_blob(f"{nome_completo}_face.jpg", face_file.read())
-                        else:
-                            st.warning(f"Rosto não detectado no RG de {nome_completo}.")
+
+                        # Avaliação da qualidade da frente e do verso
+                        quality_metrics_front = evaluate_image_quality(tmp_path)
+                        quality_report_front = assess_image_quality(quality_metrics_front)
+
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_back:
+                            img_back = Image.open(back_image)
+                            img_back.save(tmp_back.name)
+                            tmp_back_path = tmp_back.name
+
+                        quality_metrics_back = evaluate_image_quality(tmp_back_path)
+                        quality_report_back = assess_image_quality(quality_metrics_back)
+
+                        st.write("Relatório de Qualidade da Imagem")
+                        quality_df = create_quality_dataframe(quality_metrics_front, quality_report_front,
+                                                              quality_metrics_back, quality_report_back)
+                        st.dataframe(quality_df)
+
                     else:
                         st.error("Documento de RG (verso) não identificado corretamente.")
                 else:
