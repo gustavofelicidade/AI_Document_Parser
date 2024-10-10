@@ -176,12 +176,11 @@ def cnh_process(result, side):
                             "Confiança": field.confidence
                         })
                     elif field_name in ["FirstName", "LastName"]:
-                        # Store the first name and last name
+                        # Guardo as variaveis "first name" e "last name"
                         if field_name == "FirstName":
                             first_name = field.content if hasattr(field, 'content') else field.value_string
                         else:
                             last_name = field.content if hasattr(field, 'content') else field.value_string
-                        # We will combine them later
                     else:
                         data.append({
                             "Nome do Campo": field_name_mapping.get(field_name, field_name),

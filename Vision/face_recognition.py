@@ -34,3 +34,6 @@ def detect_faces(image_path, full_name):
                 face_path = save_face(image, bbox, full_name)
                 return face_path  # Retornar o caminho do rosto extraído
     return None
+
+
+

@@ -29,8 +29,8 @@ API_KEY = os.getenv("API_KEY")
 print(f"ENDPOINT: {ENDPOINT} \n  API_KEY: {API_KEY}")
 
 field_name_mapping = {
-    "LastName": "Nome",
-    "FirstName": "Sobrenome",
+    "FirstName": "Nome",
+    "LastName": "Sobrenome",
     "DocumentNumber": "Número de Registro",
     "DateOfBirth": "Data de Nascimento",
     "DateOfExpiration": "Data de Expiração",
@@ -149,7 +149,7 @@ def cnh_process(result, side):
     if result.documents:
         for doc in result.documents:
             if side == "front":
-                fields_of_interest = ["LastName", "FirstName", "DocumentNumber", "DateOfBirth", "DateOfExpiration",
+                fields_of_interest = ["FirstName", "LastName", "DocumentNumber", "DateOfBirth", "DateOfExpiration",
                                       "Sex", "Address", "CountryRegion", "Region", "CPF", "Filiacao", "Validade",
                                       "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local",
                                       "Doc_Identidade"]
@@ -177,12 +177,12 @@ def cnh_process(result, side):
                             "Confiança": field.confidence
                         })
                     elif field_name in ["FirstName", "LastName"]:
-                        # Store the first name and last name
+                        # Armazena o nome e sobrenome
                         if field_name == "FirstName":
                             first_name = field.content if hasattr(field, 'content') else field.value_string
                         else:
                             last_name = field.content if hasattr(field, 'content') else field.value_string
-                        # We will combine them later
+                        # Vamos combiná-los depois
                     else:
                         data.append({
                             "Nome do Campo": field_name_mapping.get(field_name, field_name),
@@ -190,10 +190,10 @@ def cnh_process(result, side):
                             "Confiança": field.confidence
                         })
 
-            # After processing all fields, combine last name and first name
-            full_name = f"{last_name} {first_name}".strip()
+            # Após processar todos os campos, combine o nome e o sobrenome
+            full_name = f"{first_name} {last_name}".strip()
             if full_name:
-                data.insert(0, {  # Insert at the beginning
+                data.insert(0, {  # Insere no início
                     "Nome do Campo": "Nome Completo",
                     "Valor/Conteúdo": full_name,
                     "Confiança": min(
@@ -205,7 +205,7 @@ def cnh_process(result, side):
             # Contar quantos campos estão ausentes (None) na field_list
             missing_fields_count = field_list.count(None)
             if missing_fields_count >= required_fields_count:
-                # st.error("Documento de CNH (frente) não identificado corretamente. Por favor, tente novamente.")
+                st.error("Documento de CNH não identificado, por favor tente novamente.")
                 st.error(f"Campos ausentes: {missing_fields_count}")
                 return None  # Retorna nada
 
@@ -290,8 +290,6 @@ def rg_process(result):
             print(f"Field List: {field_list}")
 
     return pd.DataFrame(data)
-
-
 
 
 def analyze_uploaded_document(uploaded_file, document_type, side=None):
