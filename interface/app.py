@@ -1,5 +1,7 @@
 import os
 import json
+import time
+
 import streamlit as st
 import pandas as pd
 import yaml
@@ -223,7 +225,7 @@ def rg_process(result):
 
     if result.documents:
         for doc in result.documents:
-            fields_of_interest = ["Registro_Geral", "Nome", "FirstName", "LastName", "Data_De_Expedicao", "Data_De_Nascimento", "Naturalidade",
+            fields_of_interest = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Data_De_Nascimento", "Naturalidade",
                                   "Filiacao", "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
 
             # Laço para verificar e processar os campos de interesse
@@ -393,6 +395,7 @@ class Homepage:
 
                             st.write("Detectando rosto...")
                             face_path = detect_faces(tmp_path, nome_completo)
+                            time.sleep(2.5)  # Pequeno delay para aguardar o processamento completo
 
                             if face_path:
                                 st.image(face_path, caption=f"Rosto de {nome_completo}", width=200)
