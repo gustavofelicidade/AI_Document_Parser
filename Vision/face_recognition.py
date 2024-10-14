@@ -2,10 +2,26 @@ import cv2
 import os
 from ultralytics import YOLO
 import time
+from dotenv import load_dotenv
 
 # Definir caminho de saída para salvar fotos dos rostos detectados
 output_dir = "C:/Users/Dell/Documents/SDLabs/AI_Document_Parser/AI_Vision/Vision/faces"
 os.makedirs(output_dir, exist_ok=True)
+
+# Carregar variáveis de ambiente (se necessário)
+load_dotenv()
+
+def has_face(image_path):
+    """Verifica se há rostos na imagem usando YOLO."""
+    model = YOLO("yolov8n-face.pt")  # Use um modelo pré-treinado para detecção de faces
+    results = model(image_path)
+
+    for result in results:
+        for box in result.boxes:
+            cls = int(box.cls[0])  # Classe do objeto detectado
+            if cls == 0:  # Classe 0 corresponde a 'face' no modelo de detecção de faces
+                return True
+    return False
 
 
 def save_face(image, bbox, name):
@@ -25,12 +41,9 @@ def save_face(image, bbox, name):
     return None
 
 
-
-
-
 def detect_faces(image_path, full_name):
     """Detecta rostos numa imagem usando YOLO e salva o rosto extraído."""
-    model = YOLO("yolov8n.pt")  # Substitua com o modelo apropriado, se necessário
+    model = YOLO("yolov8n-face.pt")  # Use um modelo pré-treinado para detecção de faces
     results = model(image_path)
 
     # Carregar a imagem usando OpenCV para manipulação
@@ -40,16 +53,12 @@ def detect_faces(image_path, full_name):
     for result in results:
         for box in result.boxes:
             cls = int(box.cls[0])  # Classe do objeto detectado
-            if cls == 0:  # Assumindo que a classe 0 seja "pessoa/rosto"
+            if cls == 0:  # Classe 0 corresponde a 'face' no modelo de detecção de faces
                 bbox = box.xyxy[0].numpy()  # Coordenadas do bounding box
                 face_path = save_face(image, bbox, full_name)
 
                 # Aguardar brevemente para garantir o processamento do rosto
-                time.sleep(2.5)  # Delay de meio segundo para garantir que o rosto seja salvo corretamente
+                time.sleep(0.5)  # Delay de meio segundo para garantir que o rosto seja salvo corretamente
 
                 return face_path  # Retornar o caminho do rosto extraído
     return None
-
-
-
-
