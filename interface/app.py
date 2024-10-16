@@ -48,7 +48,8 @@ field_name_mapping = {
     "orgEmissor_UF": "Orgão Emissor/UF",
     "Data_Emissao": "Data de Emissão",
     "Local": "Local",
-    "Doc_Identidade": "Documento de Identidade"
+    "Doc_Identidade": "Documento de Identidade",
+    "ASSINATURA DO EMISSOR": "Assinatura do Emissor"
 }
 
 field_name_mapping_rg = {
@@ -143,29 +144,60 @@ def separate_filiacao(filiacao):
     return father_name, mother_name
 
 
+def process_cnh_data(document_pages):
+    """
+    Função que processa os dados de reconhecimento da CNH e verifica se há assinatura do emissor no documento.
+    Retorna True se a assinatura for encontrada, False caso contrário.
+
+    :param document_pages: Lista de páginas extraídas por visão computacional, contendo informações sobre as linhas detectadas.
+    :return: True se "ASSINATURA DO EMISSOR" for encontrada, False caso contrário.
+    """
+    for page in document_pages:
+        for line_data in page.lines:
+            # Verificando se o conteúdo da linha inclui 'ASSINATURA DO EMISSOR'
+            if 'ASSINATURA DO EMISSOR' in line_data.content.upper():
+                variavel_assinatura_do_emissor = line_data.content
+                print(f"Assinatura do Emissor: {variavel_assinatura_do_emissor}")
+                return True  # Assinatura encontrada
+    print("Assinatura do Emissor não encontrada.")
+    return False  # Assinatura não encontrada
+
+
 def cnh_process(result, side):
     data = []
-    missing_fields_count = 0  # Contador de campos ausentes
     required_fields_count = 4  # Número máximo de campos ausentes permitidos
     field_list = []
     first_name = ""
     last_name = ""
     if result.documents:
-        for doc in result.documents:
-            if side == "front":
-                fields_of_interest = ["FirstName", "LastName", "DocumentNumber", "DateOfBirth", "DateOfExpiration",
-                                      "Sex", "Address", "CountryRegion", "Region", "CPF", "Filiacao", "Validade",
-                                      "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local",
-                                      "Doc_Identidade"]
-            else:
-                fields_of_interest = ["Local", "Data_Emissao", "Validade"]
+        print(f"Result Documents Pages : {result.pages}")
+        print(f"=========================================================")
+        print(f"Verificar se há assinatura do emissor no documento:")
+        assinatura_presente = process_cnh_data(result.pages)
 
+        if side == "front":
+            # Se a assinatura for encontrada na frente, exibir erro e interromper o processamento
+            if assinatura_presente:
+                st.error("A imagem da frente da CNH parece conter a verso do documento ou a CNH aberta. Por favor, envie apenas a imagem da frente da CNH.")
+                return None  # Interrompe o processamento
+
+            fields_of_interest = [
+                "FirstName", "LastName", "DocumentNumber", "DateOfBirth",
+                "DateOfExpiration", "Sex", "Address", "CountryRegion",
+                "Region", "CPF", "Filiacao", "Validade", "Habilitacao",
+                "CatHab", "orgEmissor_UF", "Data_Emissao", "Local",
+                "Doc_Identidade"
+            ]
+        else:
+            fields_of_interest = ["Local", "Data_Emissao", "Validade"]
+
+        for doc in result.documents:
             # Laço para verificar e processar os campos de interesse do doc.fields
             for field_name in fields_of_interest:
                 field = doc.fields.get(field_name)
                 if field:
-                    field_list.append(field.content)
-                    print(f"Field Name: {field.content}")
+                    field_list.append(field.content if hasattr(field, 'content') else field.value_string)
+                    # Processamento dos campos conforme necessário
 
                     if field_name == "Filiacao":
                         father_name, mother_name = separate_filiacao(
@@ -214,7 +246,12 @@ def cnh_process(result, side):
                 return None  # Retorna nada
 
             print(f"Field List: {field_list}")
+    else:
+        st.error("Nenhum documento foi encontrado na análise.")
+        return None  # Retorna nada
+
     return pd.DataFrame(data)
+
 
 
 def rg_process(result):
@@ -420,7 +457,7 @@ class Homepage:
 
                                 st.write("Detectando rosto...")
                                 face_path = detect_faces(tmp_path, nome_completo)
-                                time.sleep(2.5)  # Pequeno delay para aguardar o processamento completo
+                                time.sleep(0.5)  # Pequeno delay para aguardar o processamento completo
 
                                 if face_path:
                                     st.image(face_path, caption=f"Rosto de {nome_completo}", width=200)

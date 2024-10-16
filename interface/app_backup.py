@@ -14,7 +14,7 @@ from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.ai.documentintelligence.models import DocumentAnalysisFeature, AnalyzeDocumentRequest
 
 import resources.database as db
-from Vision.face_recognition import detect_faces
+from Vision.face_recognition import detect_faces, has_face
 from PIL import Image
 import tempfile
 # Processamento de Imagem
@@ -48,7 +48,8 @@ field_name_mapping = {
     "orgEmissor_UF": "Orgão Emissor/UF",
     "Data_Emissao": "Data de Emissão",
     "Local": "Local",
-    "Doc_Identidade": "Documento de Identidade"
+    "Doc_Identidade": "Documento de Identidade",
+    "ASSINATURA DO EMISSOR": "Assinatura do Emissor"
 }
 
 field_name_mapping_rg = {
@@ -62,6 +63,7 @@ field_name_mapping_rg = {
     "Assinatura_Do_Diretor": "Assinatura do Diretor"
 }
 
+
 # Carregar a lista de nomes comuns do JSON
 with pkg_resources.open_text('resources', 'lista-de-nomes.json') as file:
     nome_data = json.load(file)
@@ -71,10 +73,12 @@ common_last_names = {name.upper() for name in nome_data["common_last_names"]}
 
 def save_image(uploaded_file):
     """Salva a imagem do documento e insere no Blob Storage."""
+    # Redefinir o cursor antes de ler
+    uploaded_file.seek(0)
     file_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uploaded_file.name}"
 
     # Obter os dados do arquivo como bytes
-    file_data = uploaded_file.getbuffer()
+    file_data = uploaded_file.read()
 
     # Fazer o upload da imagem para o Blob Storage
     db.upload_image_to_blob(file_name, file_data)
@@ -149,6 +153,8 @@ def cnh_process(result, side):
     first_name = ""
     last_name = ""
     if result.documents:
+        # print(f"Result Documents Values : {result.items}")
+        # print(f"Result Documents Pages : {result.pages}")
         for doc in result.documents:
             if side == "front":
                 fields_of_interest = ["FirstName", "LastName", "DocumentNumber", "DateOfBirth", "DateOfExpiration",
@@ -156,14 +162,15 @@ def cnh_process(result, side):
                                       "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao", "Local",
                                       "Doc_Identidade"]
             else:
-                fields_of_interest = ["Local", "Data_Emissao", "Validade"]
+                fields_of_interest = ["Local", "ASSINATURA DO EMISSOR", "Data_Emissao", "Validade"]
+
 
             # Laço para verificar e processar os campos de interesse do doc.fields
             for field_name in fields_of_interest:
                 field = doc.fields.get(field_name)
                 if field:
                     field_list.append(field.content)
-                    print(f"Field Name: {field.content}")
+                    # print(f"Field Name: {field.content}")
 
                     if field_name == "Filiacao":
                         father_name, mother_name = separate_filiacao(
@@ -296,6 +303,9 @@ def rg_process(result):
 
 def analyze_uploaded_document(uploaded_file, document_type, side=None):
     client = DocumentIntelligenceClient(endpoint=ENDPOINT, credential=AzureKeyCredential(API_KEY))
+
+    # Redefinir o cursor antes de ler
+    uploaded_file.seek(0)
     document = uploaded_file.read()
 
     # Definição da Lista de Parametros da Requisição conforme o tipo de documento
@@ -373,58 +383,73 @@ class Homepage:
                     if back_image:
                         st.image(back_image, caption="CNH Back Image", width=300)
 
-                        file_path = save_image(back_image)
-                        st.success(f"Imagem salva em: {file_path}")
+                        # Verificar se a imagem do verso contém uma face
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_back:
+                            img_back = Image.open(back_image)
+                            img_back.save(tmp_back.name)
+                            tmp_back_path = tmp_back.name
 
-                        st.write("Analisando documento do verso...")
-                        df_back = analyze_uploaded_document(back_image, "CNH", side="back")
+                        # Depois de usar back_image, redefina o cursor
+                        back_image.seek(0)
 
-                        if df_back is not None and not df_back.empty:
-                            st.write("CNH Front Data")
-                            st.write(df_front)
-                            st.write("CNH Back Data")
-                            st.write(df_back)
-
-                            nome_completo = \
-                            df_front[df_front['Nome do Campo'] == 'Nome Completo']['Valor/Conteúdo'].values[0]
-
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-                                img = Image.open(front_image)
-                                img.save(tmp.name)
-                                tmp_path = tmp.name
-
-                            st.write("Detectando rosto...")
-                            face_path = detect_faces(tmp_path, nome_completo)
-                            time.sleep(2.5)  # Pequeno delay para aguardar o processamento completo
-
-                            if face_path:
-                                st.image(face_path, caption=f"Rosto de {nome_completo}", width=200)
-                                st.success(f"Rosto de {nome_completo} detectado e salvo.")
-
-                                with open(face_path, "rb") as face_file:
-                                    db.upload_image_to_blob(f"{nome_completo}_face.jpg", face_file.read())
-
-                            # Avaliar a qualidade da frente e do verso da imagem
-                            quality_metrics_front = evaluate_image_quality(tmp_path)
-                            quality_report_front = assess_image_quality(quality_metrics_front)
-
-                            # Avaliação do verso da CNH
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_back:
-                                img_back = Image.open(back_image)
-                                img_back.save(tmp_back.name)
-                                tmp_back_path = tmp_back.name
-
-                            quality_metrics_back = evaluate_image_quality(tmp_back_path)
-                            quality_report_back = assess_image_quality(quality_metrics_back)
-
-                            # Exibir a qualidade da frente e do verso em um DataFrame
-                            st.write("Relatório de Qualidade da Imagem")
-                            quality_df = create_quality_dataframe(quality_metrics_front, quality_report_front,
-                                                                  quality_metrics_back, quality_report_back)
-                            st.dataframe(quality_df)
-
+                        # Usar a função has_face para detectar face na imagem do verso
+                        if has_face(tmp_back_path):
+                            st.error(
+                                "A imagem do verso da CNH parece conter a frente do documento ou a CNH aberta. Por favor, envie apenas a imagem do verso da CNH.")
+                            return  # Interrompe o processamento
                         else:
-                            st.error("Documento de CNH (verso) não identificado corretamente.")
+                            # Redefina o cursor antes de salvar a imagem
+                            back_image.seek(0)
+                            # Salvar a imagem e continuar o processamento
+                            file_path = save_image(back_image)
+                            st.success(f"Imagem salva em: {file_path}")
+
+                            st.write("Analisando documento do verso...")
+                            # Redefina o cursor antes de ler novamente
+                            back_image.seek(0)
+                            df_back = analyze_uploaded_document(back_image, "CNH", side="back")
+
+                            if df_back is not None and not df_back.empty:
+                                st.write("Dados da CNH (Frente)")
+                                st.write(df_front)
+                                st.write("Dados da CNH (Verso)")
+                                st.write(df_back)
+
+                                nome_completo = \
+                                df_front[df_front['Nome do Campo'] == 'Nome Completo']['Valor/Conteúdo'].values[0]
+
+                                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                                    img = Image.open(front_image)
+                                    img.save(tmp.name)
+                                    tmp_path = tmp.name
+
+                                st.write("Detectando rosto...")
+                                face_path = detect_faces(tmp_path, nome_completo)
+                                time.sleep(2.5)  # Pequeno delay para aguardar o processamento completo
+
+                                if face_path:
+                                    st.image(face_path, caption=f"Rosto de {nome_completo}", width=200)
+                                    st.success(f"Rosto de {nome_completo} detectado e salvo.")
+
+                                    with open(face_path, "rb") as face_file:
+                                        db.upload_image_to_blob(f"{nome_completo}_face.jpg", face_file.read())
+
+                                # Avaliar a qualidade da frente e do verso da imagem
+                                quality_metrics_front = evaluate_image_quality(tmp_path)
+                                quality_report_front = assess_image_quality(quality_metrics_front)
+
+                                # Avaliação do verso da CNH
+                                quality_metrics_back = evaluate_image_quality(tmp_back_path)
+                                quality_report_back = assess_image_quality(quality_metrics_back)
+
+                                # Exibir a qualidade da frente e do verso em um DataFrame
+                                st.write("Relatório de Qualidade da Imagem")
+                                quality_df = create_quality_dataframe(quality_metrics_front, quality_report_front,
+                                                                      quality_metrics_back, quality_report_back)
+                                st.dataframe(quality_df)
+
+                            else:
+                                st.error("Documento de CNH (verso) não identificado corretamente.")
                     else:
                         st.warning("Por favor, insira a imagem do verso da CNH.")
             else:
