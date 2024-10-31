@@ -262,13 +262,14 @@ def rg_process(result):
     missing_fields_count = 0  # Contador de campos ausentes
     required_fields_count = 4  # Número máximo de campos ausentes permitidos
     field_list = []  # Lista para armazenar os campos encontrados
-    first_name = ""
-    last_name = ""
 
     if result.documents:
         for doc in result.documents:
-            fields_of_interest = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Data_De_Nascimento", "Naturalidade",
-                                  "Filiacao", "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
+            # Remova "DocOrigem" da lista de campos de interesse
+            fields_of_interest = [
+                "Registro_Geral", "Nome", "Data_De_Expedicao", "Data_De_Nascimento",
+                "Naturalidade", "Filiacao", "CPF", "Assinatura_Do_Diretor"
+            ]
 
             # Laço para verificar e processar os campos de interesse
             for field_name in fields_of_interest:
@@ -277,7 +278,8 @@ def rg_process(result):
                     field_list.append(field.content)
                     if field_name == "Filiacao":
                         father_name, mother_name = separate_filiacao(
-                            field.content if hasattr(field, 'content') else field.value_string)
+                            field.content if hasattr(field, 'content') else field.value_string
+                        )
                         data.append({
                             "Nome do Campo": "Nome do Pai",
                             "Valor/Conteúdo": father_name,
@@ -288,11 +290,6 @@ def rg_process(result):
                             "Valor/Conteúdo": mother_name,
                             "Confiança": field.confidence
                         })
-                    # elif field_name in ["FirstName", "LastName"]:
-                    #     if field_name == "FirstName":
-                    #         first_name = field.content if hasattr(field, 'content') else field.value_string
-                    #     else:
-                    #         last_name = field.content if hasattr(field, 'content') else field.value_string
                     else:
                         data.append({
                             "Nome do Campo": field_name_mapping_rg.get(field_name, field_name),
@@ -302,27 +299,6 @@ def rg_process(result):
                         print(f"field_name {field_name}")
                 else:
                     field_list.append(None)  # Adiciona None se o campo estiver ausente
-
-            # # Após processar todos os campos, combine nome e sobrenome se ambos existirem
-            # full_name = f"{first_name} {last_name}".strip() if first_name or last_name else None
-            # if full_name:
-            #     data.insert(0, {  # Inserir no início da lista
-            #         "Nome do Campo": "Nome",
-            #         "Valor/Conteúdo": full_name,
-            #         "Confiança": min(
-            #             field.confidence for field_name in ["FirstName", "LastName"]
-            #             if (field := doc.fields.get(field_name))
-            #         )
-            #     })
-            #
-            # elif doc.fields.get("Nome") and not full_name:
-            #     # Se somente o campo "Nome" estiver presente, use esse
-            #     field = doc.fields.get("Nome")
-            #     data.insert(0, {
-            #         "Nome do Campo": "Nome",
-            #         "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
-            #         "Confiança": field.confidence
-            #     })
 
             # Contar quantos campos estão ausentes (None) na field_list
             missing_fields_count = field_list.count(None)
@@ -334,6 +310,7 @@ def rg_process(result):
             print(f"Field List: {field_list}")
 
     return pd.DataFrame(data)
+
 
 
 def analyze_uploaded_document(uploaded_file, document_type, side=None):
