@@ -17,6 +17,7 @@ def order_points(pts):
 
     return rect
 
+
 def four_point_transform(image, pts):
     # Obtém os pontos ordenados
     rect = order_points(pts)
@@ -44,6 +45,7 @@ def four_point_transform(image, pts):
     warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
 
     return warped
+
 
 def load_image_to_transform(image):
     # Verifica se a imagem foi carregada corretamente
@@ -98,6 +100,7 @@ def load_image_to_transform(image):
         # Retorna a imagem colorida transformada
         return warped
 
+
 def save_transformed_image(transformed_image, output_dir="output", filename=None):
     if transformed_image is not None:
         # Cria o diretório de saída se não existir
@@ -124,6 +127,7 @@ def save_transformed_image(transformed_image, output_dir="output", filename=None
     else:
         print("Falha ao salvar a imagem transformada.")
         return None
+
 
 if __name__ == "__main__":
     # Exemplo de uso

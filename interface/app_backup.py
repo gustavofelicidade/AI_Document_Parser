@@ -1,7 +1,9 @@
+import io
 import os
 import json
 import time
-
+import cv2
+import numpy as np
 import streamlit as st
 import pandas as pd
 import yaml
@@ -260,13 +262,14 @@ def rg_process(result):
     missing_fields_count = 0  # Contador de campos ausentes
     required_fields_count = 4  # Número máximo de campos ausentes permitidos
     field_list = []  # Lista para armazenar os campos encontrados
-    first_name = ""
-    last_name = ""
 
     if result.documents:
         for doc in result.documents:
-            fields_of_interest = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Data_De_Nascimento", "Naturalidade",
-                                  "Filiacao", "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
+            # Remova "DocOrigem" da lista de campos de interesse
+            fields_of_interest = [
+                "Registro_Geral", "Nome", "Data_De_Expedicao", "Data_De_Nascimento",
+                "Naturalidade", "Filiacao", "CPF", "Assinatura_Do_Diretor"
+            ]
 
             # Laço para verificar e processar os campos de interesse
             for field_name in fields_of_interest:
@@ -275,7 +278,8 @@ def rg_process(result):
                     field_list.append(field.content)
                     if field_name == "Filiacao":
                         father_name, mother_name = separate_filiacao(
-                            field.content if hasattr(field, 'content') else field.value_string)
+                            field.content if hasattr(field, 'content') else field.value_string
+                        )
                         data.append({
                             "Nome do Campo": "Nome do Pai",
                             "Valor/Conteúdo": father_name,
@@ -286,11 +290,6 @@ def rg_process(result):
                             "Valor/Conteúdo": mother_name,
                             "Confiança": field.confidence
                         })
-                    # elif field_name in ["FirstName", "LastName"]:
-                    #     if field_name == "FirstName":
-                    #         first_name = field.content if hasattr(field, 'content') else field.value_string
-                    #     else:
-                    #         last_name = field.content if hasattr(field, 'content') else field.value_string
                     else:
                         data.append({
                             "Nome do Campo": field_name_mapping_rg.get(field_name, field_name),
@@ -300,27 +299,6 @@ def rg_process(result):
                         print(f"field_name {field_name}")
                 else:
                     field_list.append(None)  # Adiciona None se o campo estiver ausente
-
-            # # Após processar todos os campos, combine nome e sobrenome se ambos existirem
-            # full_name = f"{first_name} {last_name}".strip() if first_name or last_name else None
-            # if full_name:
-            #     data.insert(0, {  # Inserir no início da lista
-            #         "Nome do Campo": "Nome",
-            #         "Valor/Conteúdo": full_name,
-            #         "Confiança": min(
-            #             field.confidence for field_name in ["FirstName", "LastName"]
-            #             if (field := doc.fields.get(field_name))
-            #         )
-            #     })
-            #
-            # elif doc.fields.get("Nome") and not full_name:
-            #     # Se somente o campo "Nome" estiver presente, use esse
-            #     field = doc.fields.get("Nome")
-            #     data.insert(0, {
-            #         "Nome do Campo": "Nome",
-            #         "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
-            #         "Confiança": field.confidence
-            #     })
 
             # Contar quantos campos estão ausentes (None) na field_list
             missing_fields_count = field_list.count(None)
@@ -337,47 +315,129 @@ def rg_process(result):
 def analyze_uploaded_document(uploaded_file, document_type, side=None):
     client = DocumentIntelligenceClient(endpoint=ENDPOINT, credential=AzureKeyCredential(API_KEY))
 
-    # Redefinir o cursor antes de ler
+    # Reset the file pointer and read the file
     uploaded_file.seek(0)
     document = uploaded_file.read()
 
-    # Definição da Lista de Parametros da Requisição conforme o tipo de documento
-    #######################################################################################################
+    # Define query fields based on document type
     if document_type.startswith("CNH"):
         if side == "front":
             query_fields = ["CPF", "Filiacao", "Validade", "Habilitacao", "CatHab", "orgEmissor_UF", "Data_Emissao",
                             "Local", "Doc_Identidade", "FirstName", "LastName", "DateOfBirth", "DocumentNumber"]
         else:
             query_fields = ["Local", "Data_Emissao", "Filiacao", "Validade"]
-
     elif document_type.startswith("RG"):
         query_fields = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Naturalidade", "Filiacao",
                         "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
+    else:
+        query_fields = []
 
-    #######################################################################################################
-
-    # Modelo da Requisição
+    # Initial analysis
     poller = client.begin_analyze_document(
         model_id="prebuilt-idDocument",
         analyze_request=AnalyzeDocumentRequest(bytes_source=document),
         features=[DocumentAnalysisFeature.QUERY_FIELDS],
         query_fields=query_fields
     )
-
-    # Resultado da Requisição
     result = poller.result()
 
-    # Avaliar conforme o document_type
+    # Process the result based on document type
     if document_type.startswith("CNH"):
-        return cnh_process(result, side)
+        df = cnh_process(result, side)
     elif document_type.startswith("RG"):
-        return rg_process(result)
+        df = rg_process(result)
     else:
         data = []
         for page in result.pages:
             for line in page.lines:
                 data.append({"Content": line.content})
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+
+    # Check if any confidence is below 0.7
+    if df is not None and not df.empty:
+        low_confidence = df[df['Confiança'] < 0.7]   # Opcional  -> verificar custo de consumo - chamar Azure 1 vez
+        if not low_confidence.empty:
+            st.warning("Confiança baixa detectada em alguns campos. Tentando melhorar a qualidade da imagem...")
+
+            # Convert the uploaded_file to an OpenCV image
+            uploaded_file.seek(0)
+            file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+            # Use the automatic document detection function
+            transformed_image = load_image_to_transform(image)
+
+            if transformed_image is not None:
+                # Check the dimensions of the transformed image
+                height, width = transformed_image.shape[:2]
+                min_dimension = 50
+                max_dimension = 10000  # Maximum allowed dimension
+
+                # Ensure minimum dimensions
+                if height < min_dimension or width < min_dimension:
+                    scaling_factor = min_dimension / min(height, width)
+                    new_width = int(width * scaling_factor)
+                    new_height = int(height * scaling_factor)
+                    transformed_image = cv2.resize(transformed_image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+                    st.info(f"Imagem redimensionada para mínimo permitido: {new_width}x{new_height} pixels.")
+
+                # Ensure maximum dimensions
+                if height > max_dimension or width > max_dimension:
+                    scaling_factor = max_dimension / max(height, width)
+                    new_width = int(width * scaling_factor)
+                    new_height = int(height * scaling_factor)
+                    transformed_image = cv2.resize(transformed_image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+                    st.info(f"Imagem redimensionada para máximo permitido: {new_width}x{new_height} pixels.")
+
+                # Convert grayscale to BGR if necessary
+                if len(transformed_image.shape) == 2:
+                    transformed_image = cv2.cvtColor(transformed_image, cv2.COLOR_GRAY2BGR)
+
+                # Save the transformed image to a temporary buffer
+                is_success, buffer = cv2.imencode(".jpg", transformed_image)
+                io_buf = io.BytesIO(buffer)
+
+                # Reset the cursor before reading
+                io_buf.seek(0)
+                document = io_buf.read()
+
+                # Reprocess the image
+                poller = client.begin_analyze_document(
+                    model_id="prebuilt-idDocument",
+                    analyze_request=AnalyzeDocumentRequest(bytes_source=document),
+                    features=[DocumentAnalysisFeature.QUERY_FIELDS],
+                    query_fields=query_fields
+                )
+                result = poller.result()
+
+                # Process the result again
+                if document_type.startswith("CNH"):
+                    df_new = cnh_process(result, side)
+                elif document_type.startswith("RG"):
+                    df_new = rg_process(result)
+                else:
+                    data = []
+                    for page in result.pages:
+                        for line in page.lines:
+                            data.append({"Content": line.content})
+                    df_new = pd.DataFrame(data)
+
+                # Compare confidences
+                if df_new is not None and not df_new.empty:
+                    avg_confidence_original = df['Confiança'].mean()
+                    avg_confidence_new = df_new['Confiança'].mean()
+
+                    if avg_confidence_new > avg_confidence_original:
+                        st.success("A confiança dos dados melhorou após o processamento.")
+                        df = df_new
+                    else:
+                        st.info("A confiança dos dados não melhorou após o processamento. Mantendo os dados originais.")
+                else:
+                    st.warning("Não foi possível melhorar a confiança dos dados.")
+            else:
+                st.warning("Não foi possível detectar automaticamente a área do documento na imagem.")
+
+    return df
 
 
 class Homepage:
