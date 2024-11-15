@@ -67,6 +67,7 @@ field_name_mapping_rg = {
     "Assinatura_Do_Diretor": "Assinatura do Diretor"
 }
 
+
 # Carregar a lista de nomes comuns do JSON
 with pkg_resources.open_text('resources', 'lista-de-nomes.json') as file:
     nome_data = json.load(file)
@@ -264,6 +265,9 @@ def rg_process(result):
     field_list = []  # Lista para armazenar os campos encontrados
 
     if result.documents:
+        print(f"Conteudo do Documento: {result.documents}")
+
+
         for doc in result.documents:
             # Remova "DocOrigem" da lista de campos de interesse
             fields_of_interest = [
@@ -353,91 +357,99 @@ def analyze_uploaded_document(uploaded_file, document_type, side=None):
                 data.append({"Content": line.content})
         df = pd.DataFrame(data)
 
-    # Check if any confidence is below 0.7
-    if df is not None and not df.empty:
-        low_confidence = df[df['Confiança'] < 0.7]   # Opcional  -> verificar custo de consumo - chamar Azure 1 vez
-        if not low_confidence.empty:
-            st.warning("Confiança baixa detectada em alguns campos. Tentando melhorar a qualidade da imagem...")
+    # Retornar o DataFrame sem realizar a segunda chamada ao Azure
+    return df
 
-            # Convert the uploaded_file to an OpenCV image
-            uploaded_file.seek(0)
-            file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-            # Use the automatic document detection function
-            transformed_image = load_image_to_transform(image)
+def improve_image_and_reprocess(uploaded_file, document_type, side, df, query_fields):
+    """
+    Função opcional que melhora a qualidade da imagem e reprocessa o documento.
+    Não é chamada no fluxo atual, mas está disponível para uso futuro.
+    """
+    st.warning("Confiança baixa detectada em alguns campos. Tentando melhorar a qualidade da imagem...")
 
-            if transformed_image is not None:
-                # Check the dimensions of the transformed image
-                height, width = transformed_image.shape[:2]
-                min_dimension = 50
-                max_dimension = 10000  # Maximum allowed dimension
+    # Convert the uploaded_file to an OpenCV image
+    uploaded_file.seek(0)
+    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-                # Ensure minimum dimensions
-                if height < min_dimension or width < min_dimension:
-                    scaling_factor = min_dimension / min(height, width)
-                    new_width = int(width * scaling_factor)
-                    new_height = int(height * scaling_factor)
-                    transformed_image = cv2.resize(transformed_image, (new_width, new_height), interpolation=cv2.INTER_AREA)
-                    st.info(f"Imagem redimensionada para mínimo permitido: {new_width}x{new_height} pixels.")
+    # Use the automatic document detection function
+    transformed_image = load_image_to_transform(image)
 
-                # Ensure maximum dimensions
-                if height > max_dimension or width > max_dimension:
-                    scaling_factor = max_dimension / max(height, width)
-                    new_width = int(width * scaling_factor)
-                    new_height = int(height * scaling_factor)
-                    transformed_image = cv2.resize(transformed_image, (new_width, new_height), interpolation=cv2.INTER_AREA)
-                    st.info(f"Imagem redimensionada para máximo permitido: {new_width}x{new_height} pixels.")
+    if transformed_image is not None:
+        # Check the dimensions of the transformed image
+        height, width = transformed_image.shape[:2]
+        min_dimension = 50
+        max_dimension = 10000  # Maximum allowed dimension
 
-                # Convert grayscale to BGR if necessary
-                if len(transformed_image.shape) == 2:
-                    transformed_image = cv2.cvtColor(transformed_image, cv2.COLOR_GRAY2BGR)
+        # Ensure minimum dimensions
+        if height < min_dimension or width < min_dimension:
+            scaling_factor = min_dimension / min(height, width)
+            new_width = int(width * scaling_factor)
+            new_height = int(height * scaling_factor)
+            transformed_image = cv2.resize(transformed_image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+            st.info(f"Imagem redimensionada para mínimo permitido: {new_width}x{new_height} pixels.")
 
-                # Save the transformed image to a temporary buffer
-                is_success, buffer = cv2.imencode(".jpg", transformed_image)
-                io_buf = io.BytesIO(buffer)
+        # Ensure maximum dimensions
+        if height > max_dimension or width > max_dimension:
+            scaling_factor = max_dimension / max(height, width)
+            new_width = int(width * scaling_factor)
+            new_height = int(height * scaling_factor)
+            transformed_image = cv2.resize(transformed_image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+            st.info(f"Imagem redimensionada para máximo permitido: {new_width}x{new_height} pixels.")
 
-                # Reset the cursor before reading
-                io_buf.seek(0)
-                document = io_buf.read()
+        # Convert grayscale to BGR if necessary
+        if len(transformed_image.shape) == 2:
+            transformed_image = cv2.cvtColor(transformed_image, cv2.COLOR_GRAY2BGR)
 
-                # Reprocess the image
-                poller = client.begin_analyze_document(
-                    model_id="prebuilt-idDocument",
-                    analyze_request=AnalyzeDocumentRequest(bytes_source=document),
-                    features=[DocumentAnalysisFeature.QUERY_FIELDS],
-                    query_fields=query_fields
-                )
-                result = poller.result()
+        # Save the transformed image to a temporary buffer
+        is_success, buffer = cv2.imencode(".jpg", transformed_image)
+        io_buf = io.BytesIO(buffer)
 
-                # Process the result again
-                if document_type.startswith("CNH"):
-                    df_new = cnh_process(result, side)
-                elif document_type.startswith("RG"):
-                    df_new = rg_process(result)
-                else:
-                    data = []
-                    for page in result.pages:
-                        for line in page.lines:
-                            data.append({"Content": line.content})
-                    df_new = pd.DataFrame(data)
+        # Reset the cursor before reading
+        io_buf.seek(0)
+        document = io_buf.read()
 
-                # Compare confidences
-                if df_new is not None and not df_new.empty:
-                    avg_confidence_original = df['Confiança'].mean()
-                    avg_confidence_new = df_new['Confiança'].mean()
+        # Reprocess the image
+        client = DocumentIntelligenceClient(endpoint=ENDPOINT, credential=AzureKeyCredential(API_KEY))
 
-                    if avg_confidence_new > avg_confidence_original:
-                        st.success("A confiança dos dados melhorou após o processamento.")
-                        df = df_new
-                    else:
-                        st.info("A confiança dos dados não melhorou após o processamento. Mantendo os dados originais.")
-                else:
-                    st.warning("Não foi possível melhorar a confiança dos dados.")
+        poller = client.begin_analyze_document(
+            model_id="prebuilt-idDocument",
+            analyze_request=AnalyzeDocumentRequest(bytes_source=document),
+            features=[DocumentAnalysisFeature.QUERY_FIELDS],
+            query_fields=query_fields
+        )
+        result = poller.result()
+
+        # Process the result again
+        if document_type.startswith("CNH"):
+            df_new = cnh_process(result, side)
+        elif document_type.startswith("RG"):
+            df_new = rg_process(result)
+        else:
+            data = []
+            for page in result.pages:
+                for line in page.lines:
+                    data.append({"Content": line.content})
+            df_new = pd.DataFrame(data)
+
+        # Compare confidences
+        if df_new is not None and not df_new.empty:
+            avg_confidence_original = df['Confiança'].mean()
+            avg_confidence_new = df_new['Confiança'].mean()
+
+            if avg_confidence_new > avg_confidence_original:
+                st.success("A confiança dos dados melhorou após o processamento.")
+                df = df_new
             else:
-                st.warning("Não foi possível detectar automaticamente a área do documento na imagem.")
+                st.info("A confiança dos dados não melhorou após o processamento. Mantendo os dados originais.")
+        else:
+            st.warning("Não foi possível melhorar a confiança dos dados.")
+    else:
+        st.warning("Não foi possível detectar automaticamente a área do documento na imagem.")
 
     return df
+
 
 
 class Homepage:

@@ -2,10 +2,10 @@ import requests
 from azure.cognitiveservices.vision.face import FaceClient
 from msrest.authentication import CognitiveServicesCredentials
 from PIL import Image, ImageDraw
-
+import os
 # Chave e endpoint
-KEY = "77e7c2bb59e44c8da77cf38e71ef000b"
-ENDPOINT = "https://face-api-qsti-dev-01.cognitiveservices.azure.com/"
+KEY =  os.getenv("FACE_SUBSCRIPTION_KEY")
+ENDPOINT = os.getenv("ENDPOINT")
 # KEY = "ba3d7342468c402a8ee5392f25775f92"
 # ENDPOINT = "https://faceidcomputacional.cognitiveservices.azure.com/"
 

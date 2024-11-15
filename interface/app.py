@@ -67,6 +67,24 @@ field_name_mapping_rg = {
     "Assinatura_Do_Diretor": "Assinatura do Diretor"
 }
 
+field_name_mapping_rg_cin = {
+    "Nome": "Nome Completo",
+    "Filiacao": "Filiação",
+    "Data_De_Nascimento": "Data de Nascimento",
+    "Naturalidade": "Naturalidade",
+    "Fator_RH": "Fator RH",
+    "Observacao": "Observação",
+    "CPF": "CPF",
+    "Registro_Geral": "Registro Geral",
+    "Data_De_Expedicao": "Data de Expedição",
+    "Titulo_De_Eleitor": "Título de Eleitor",
+    "NIS_PIS_PASEP": "NIS/PIS/PASEP",
+    "Certificado_Militar": "Certificado Militar",
+    "CTPS": "CTPS",
+    "Identidade_Profissional": "Identidade Profissional"
+}
+
+
 # Carregar a lista de nomes comuns do JSON
 with pkg_resources.open_text('resources', 'lista-de-nomes.json') as file:
     nome_data = json.load(file)
@@ -264,6 +282,9 @@ def rg_process(result):
     field_list = []  # Lista para armazenar os campos encontrados
 
     if result.documents:
+        print(f"Conteudo do Documento: {result.documents}")
+
+
         for doc in result.documents:
             # Remova "DocOrigem" da lista de campos de interesse
             fields_of_interest = [
@@ -312,6 +333,114 @@ def rg_process(result):
     return pd.DataFrame(data)
 
 
+def rg_cin_process(result, side):
+    data = []
+    missing_fields_count = 0  # Contador de campos ausentes
+    required_fields_count = 4  # Número máximo de campos ausentes permitidos
+    field_list = []  # Lista para armazenar os campos encontrados
+
+    if result.documents:
+        print(f"Conteúdo do Documento: {result.documents}")
+
+        for doc in result.documents:
+            if side == "front":
+                fields_of_interest = [
+                    "Nome", "FirstName", "LastName", "Filiacao", "Data_De_Nascimento", "DateOfBirth",
+                    "Naturalidade", "Fator_RH", "Observacao"
+                ]
+            else:
+                fields_of_interest = [
+                    "CPF", "Registro_Geral", "Data_De_Expedicao", "Titulo_De_Eleitor",
+                    "NIS_PIS_PASEP", "Certificado_Militar", "CTPS", "Identidade_Profissional"
+                ]
+
+            first_name = ""
+            last_name = ""
+            full_name = ""  # Variável para armazenar o nome completo
+            full_name_confidence = 0  # Variável para armazenar a confiança do nome completo
+
+            for field_name in fields_of_interest:
+                field = doc.fields.get(field_name)
+                if field:
+                    field_list.append(field.content if hasattr(field, 'content') else field.value_string)
+                    if field_name == "Filiacao":
+                        father_name, mother_name = separate_filiacao(
+                            field.content if hasattr(field, 'content') else field.value_string
+                        )
+                        data.append({
+                            "Nome do Campo": "Nome do Pai",
+                            "Valor/Conteúdo": father_name,
+                            "Confiança": field.confidence
+                        })
+                        data.append({
+                            "Nome do Campo": "Nome da Mãe",
+                            "Valor/Conteúdo": mother_name,
+                            "Confiança": field.confidence
+                        })
+                    elif field_name == "Nome":
+                        # Armazena o nome completo diretamente
+                        full_name = field.content if hasattr(field, 'content') else field.value_string
+                        full_name_confidence = field.confidence
+                        # Não adiciona ao 'data' agora para evitar duplicação
+                    elif field_name in ["FirstName", "LastName"]:
+                        # Armazena o nome e sobrenome
+                        if field_name == "FirstName":
+                            first_name = field.content if hasattr(field, 'content') else field.value_string
+                        else:
+                            last_name = field.content if hasattr(field, 'content') else field.value_string
+                    else:
+                        data.append({
+                            "Nome do Campo": field_name_mapping_rg_cin.get(field_name, field_name),
+                            "Valor/Conteúdo": field.content if hasattr(field, 'content') else field.value_string,
+                            "Confiança": field.confidence
+                        })
+                        print(f"field_name {field_name}")
+                else:
+                    field_list.append(None)  # Adiciona None se o campo estiver ausente
+
+            # Decide qual nome completo usar
+            if full_name:
+                data.insert(0, {  # Insere no início
+                    "Nome do Campo": "Nome Completo",
+                    "Valor/Conteúdo": full_name,
+                    "Confiança": full_name_confidence
+                })
+            elif first_name or last_name:
+                combined_name = f"{first_name} {last_name}".strip()
+                if combined_name:
+                    # Calcula a confiança mínima entre FirstName e LastName
+                    confidences = []
+                    if first_name:
+                        field = doc.fields.get("FirstName")
+                        if field:
+                            confidences.append(field.confidence)
+                    if last_name:
+                        field = doc.fields.get("LastName")
+                        if field:
+                            confidences.append(field.confidence)
+                    min_confidence = min(confidences) if confidences else 0
+                    data.insert(0, {  # Insere no início
+                        "Nome do Campo": "Nome Completo",
+                        "Valor/Conteúdo": combined_name,
+                        "Confiança": min_confidence
+                    })
+
+            # Contar quantos campos estão ausentes (None) na field_list
+            missing_fields_count = field_list.count(None)
+            if missing_fields_count >= required_fields_count:
+                st.error(f"Documento de RG CIN não identificado. Campos ausentes: {missing_fields_count}")
+                st.error(f"Por favor, insira o Documento de RG CIN novamente.")
+                return None  # Retorna nada para indicar que o documento não foi identificado corretamente
+
+            print(f"Field List: {field_list}")
+
+    else:
+        st.error("Nenhum documento foi encontrado na análise.")
+        return None  # Retorna nada
+
+    return pd.DataFrame(data)
+
+
 def analyze_uploaded_document(uploaded_file, document_type, side=None):
     client = DocumentIntelligenceClient(endpoint=ENDPOINT, credential=AzureKeyCredential(API_KEY))
 
@@ -326,9 +455,16 @@ def analyze_uploaded_document(uploaded_file, document_type, side=None):
                             "Local", "Doc_Identidade", "FirstName", "LastName", "DateOfBirth", "DocumentNumber"]
         else:
             query_fields = ["Local", "Data_Emissao", "Filiacao", "Validade"]
-    elif document_type.startswith("RG"):
+    elif document_type == "RG":
         query_fields = ["Registro_Geral", "Nome", "Data_De_Expedicao", "Naturalidade", "Filiacao",
                         "DocOrigem", "CPF", "Assinatura_Do_Diretor"]
+    elif document_type == "RG_CIN":
+        if side == "front":
+            query_fields = ["Nome", "FirstName", "LastName", "Filiacao", "Data_De_Nascimento", "DateOfBirth",
+                            "Naturalidade", "Fator_RH", "Observacao"]
+        else:
+            query_fields = ["CPF", "Registro_Geral", "Data_De_Expedicao", "Titulo_De_Eleitor",
+                            "NIS_PIS_PASEP", "Certificado_Militar", "CTPS", "Identidade_Profissional"]
     else:
         query_fields = []
 
@@ -344,8 +480,10 @@ def analyze_uploaded_document(uploaded_file, document_type, side=None):
     # Process the result based on document type
     if document_type.startswith("CNH"):
         df = cnh_process(result, side)
-    elif document_type.startswith("RG"):
+    elif document_type == "RG":
         df = rg_process(result)
+    elif document_type == "RG_CIN":
+        df = rg_cin_process(result, side)
     else:
         data = []
         for page in result.pages:
@@ -353,7 +491,6 @@ def analyze_uploaded_document(uploaded_file, document_type, side=None):
                 data.append({"Content": line.content})
         df = pd.DataFrame(data)
 
-    # Retornar o DataFrame sem realizar a segunda chamada ao Azure
     return df
 
 
@@ -454,12 +591,14 @@ class Homepage:
         self.upload_documents()
 
     def upload_documents(self):
-        document_type = st.selectbox("Selecione o tipo de documento", ["CNH", "RG"])
+        document_type = st.selectbox("Selecione o tipo de documento", ["CNH", "RG", "RG_CIN"])
 
         if document_type == "CNH":
             self.upload_cnh()
         elif document_type == "RG":
             self.upload_rg()
+        elif document_type == "RG_CIN":
+            self.upload_rg_cin()
 
     def upload_cnh(self):
         st.write("Upload Imagem CNH Frente...")
@@ -630,6 +769,95 @@ class Homepage:
                     st.warning("Por favor, insira a imagem do verso do RG.")
         else:
             st.warning("Por favor, insira a imagem da frente do RG.")
+
+    def upload_rg_cin(self):
+        st.write("Upload Imagem RG CIN Frente...")
+        col1, col2 = st.columns(2)
+        with col1:
+            front_image = st.file_uploader("Upload Imagem RG CIN Frente...", type=["jpg", "jpeg", "png"],
+                                           key="front_rg_cin")
+        if front_image:
+            with col1:
+                st.image(front_image, caption="RG CIN Front Image", width=300)
+
+            file_path = save_image(front_image)
+            st.success(f"Imagem salva em: {file_path}")
+
+            st.write("Analisando documento da frente...")
+            df_front = analyze_uploaded_document(front_image, "RG_CIN", side="front")
+
+            if df_front is not None and not df_front.empty:
+                with col2:
+                    st.write("Upload Imagem RG CIN Verso...")
+                    back_image = st.file_uploader("Upload Imagem RG CIN Verso...", type=["jpg", "jpeg", "png"],
+                                                  key="back_rg_cin")
+                    if back_image:
+                        st.image(back_image, caption="RG CIN Back Image", width=300)
+
+                        file_path = save_image(back_image)
+                        st.success(f"Imagem salva em: {file_path}")
+
+                        st.write("Analisando documento do verso...")
+                        df_back = analyze_uploaded_document(back_image, "RG_CIN", side="back")
+
+                        if df_back is not None and not df_back.empty:
+                            st.write("Dados do RG CIN (Frente)")
+                            st.write(df_front)
+                            st.write("Dados do RG CIN (Verso)")
+                            st.write(df_back)
+
+                            # Tentar obter o nome completo
+                            nome_completo = ""
+                            if "Nome Completo" in df_front['Nome do Campo'].values:
+                                nome_completo = \
+                                df_front[df_front['Nome do Campo'] == 'Nome Completo']['Valor/Conteúdo'].values[0]
+                            else:
+                                nome_completo = "Desconhecido"
+
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                                img = Image.open(front_image)
+
+                                if img.mode == 'RGBA':
+                                    img = img.convert('RGB')
+
+                                img.save(tmp.name)
+                                tmp_path = tmp.name
+
+                            st.write("Detectando rosto...")
+                            face_path = detect_faces(tmp_path, nome_completo)
+
+                            if face_path:
+                                st.image(face_path, caption=f"Rosto de {nome_completo}", width=200)
+                                st.success(f"Rosto de {nome_completo} detectado e salvo.")
+
+                                with open(face_path, "rb") as face_file:
+                                    db.upload_image_to_blob(f"{nome_completo}_face.jpg", face_file.read())
+
+                            # Avaliação da qualidade da frente e do verso
+                            quality_metrics_front = evaluate_image_quality(tmp_path)
+                            quality_report_front = assess_image_quality(quality_metrics_front)
+
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_back:
+                                img_back = Image.open(back_image)
+                                img_back.save(tmp_back.name)
+                                tmp_back_path = tmp_back.name
+
+                            quality_metrics_back = evaluate_image_quality(tmp_back_path)
+                            quality_report_back = assess_image_quality(quality_metrics_back)
+
+                            st.write("Relatório de Qualidade da Imagem")
+                            quality_df = create_quality_dataframe(quality_metrics_front, quality_report_front,
+                                                                  quality_metrics_back, quality_report_back)
+                            st.dataframe(quality_df)
+
+                        else:
+                            st.error("Documento de RG CIN (verso) não identificado corretamente.")
+                    else:
+                        st.warning("Por favor, insira a imagem do verso do RG CIN.")
+            else:
+                st.error("Documento de RG CIN (frente) não identificado corretamente.")
+        else:
+            st.warning("Por favor, insira a imagem da frente do RG CIN.")
 
 
 class Main:
