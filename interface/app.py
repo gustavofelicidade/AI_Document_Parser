@@ -32,7 +32,9 @@ load_dotenv()
 # Carregar as credenciais do .env
 ENDPOINT = os.getenv("ENDPOINT")
 API_KEY = os.getenv("API_KEY")
-print(f"ENDPOINT: {ENDPOINT} \n  API_KEY: {API_KEY}")
+
+# remover linha na produção
+# print(f"ENDPOINT: {ENDPOINT} \n  API_KEY: {API_KEY}")
 
 field_name_mapping = {
     "FirstName": "Nome",
